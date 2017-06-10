@@ -28,3 +28,7 @@ def silentRemove(filename):
         os.remove(filename)
     except FileNotFoundError:
         pass
+
+
+def getModTime(filepath):
+    return int(round(os.path.getmtime(filepath) * 1000))

@@ -1,4 +1,7 @@
 import os
+
+from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
+
 import util
 from b2.exception import B2Error
 from b2.api import Bucket
@@ -26,6 +29,22 @@ def setupApi(conf):
     authorizeAccount(b2Api, conf.AccountId, conf.ApplicationKey)
 
     return b2Api
+
+
+def getFileInfoByName(api, bucketName, fileName):
+    bucket = api.get_bucket_by_name(bucketName)
+    bucketFiles = bucket.list_file_names(fileName, 1)
+    if not bucketFiles['files']:
+        return None
+    else:
+        return bucketFiles['files'][0]
+
+
+def getModTimeFromFileInfo(fileInfo):
+    if SRC_LAST_MODIFIED_MILLIS in fileInfo:
+        return int(fileInfo[SRC_LAST_MODIFIED_MILLIS])
+    else:
+        return fileInfo['uploadTimestamp']
 
 
 def downloadSecureFile(conf, bucket: Bucket, fileId, destination):

@@ -1,5 +1,9 @@
 import util
+import os
+import backblaze_b2
 from b2.api import B2Api
+
+from config import ConfigException
 
 
 class SecureIndex:
@@ -9,18 +13,33 @@ class SecureIndex:
         self.bucket_name = bucket_name
 
     def getIndex(self):
-        #todo: use local config and only pull remote if no local
-        #todo: add config to save file id and only pull if no id found
-        fileId = None
+        #try and find local file
+        if os.path.isdir(self.conf.IndexPath):
+            raise ConfigException('IndexPath cannot be a directory')
 
-        #get file id from name
-        if not fileId:
-            indexName = util.generateSecureName(self.bucket_name + '\index')
-            bucket = self.api.get_bucket_by_name(self.bucket_name)
-            bucketFiles = bucket.list_file_names(indexName, 1)
-            if not bucketFiles['files']:
-                raise Exception('index file not found in store')
+        localModTime = None
+        if os.path.exists(self.conf.IndexPath):
+            localModTime = util.getModTime(self.conf.IndexPath)
+
+        indexName = util.generateSecureName(self.bucket_name + '\index')
+
+        #get file info from b2
+        fileInfo = None
+        if self.conf.IndexFileId:
+            fileInfo = self.api.get_file_info(self.conf.IndexFileId)
+            fileId = self.conf.IndexFileId
+        else:
+            fileInfo = backblaze_b2.getFileInfoByName(indexName)
+
+        if not fileInfo:
+            if not localModTime:
+                #create
             else:
-                fileId = bucketFiles['files'][0]['fileId']
+                #use local
+        else:
+            if not localModTime or localModTime < backblaze_b2.getModTimeFromFileInfo(fileInfo):
+                #download new
+            else:
+                #use local
 
         return fileId
