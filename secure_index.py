@@ -3,7 +3,8 @@ from b2.api import B2Api
 
 
 class SecureIndex:
-    def __init__(self, api: B2Api, bucket_name):
+    def __init__(self, conf, api: B2Api, bucket_name):
+        self.conf = conf
         self.api = api
         self.bucket_name = bucket_name
 

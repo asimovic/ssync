@@ -1,10 +1,13 @@
 import os, sys, argparse
-from b2.account_info.sqlite_account_info import (SqliteAccountInfo)
-from b2.api import (B2Api, B2RawApi)
-from b2.b2http import (B2Http)
-from b2.cache import (AuthInfoCache)
 from secure_index import SecureIndex
 import backblaze_b2
+import config
+
+
+CONFIG_PATH = 'ssync.conf'
+REQUIRED_CONFIG = {'TempDir': str, 'GnuPGHome': str, 'IndexPath': str }
+OPTIONAL_CONFIG = {'IndexFileId': str}
+
 
 def createArgs():
     parser = argparse.ArgumentParser(description='Securely syncronize files between locations.')
@@ -16,11 +19,17 @@ def createArgs():
 parser = createArgs()
 args = parser.parse_args()
 
-info = SqliteAccountInfo('b2_account_info')
-b2Http = B2Http()
-rawApi = B2RawApi(b2Http)
-b2Api = B2Api(info, AuthInfoCache(info), raw_api=rawApi)
-backblaze_b2.authorizeAccount(b2Api, 'df2e5c3d73ad', '001a6e9efd45ea3dd77dc1999ec47fd904bde36c65')
+conf = config.readConfig(CONFIG_PATH,
+                         'SSync',
+                         REQUIRED_CONFIG,
+                         OPTIONAL_CONFIG)
 
-s = SecureIndex(b2Api, 'as-Test01')
+b2conf = config.readConfig(CONFIG_PATH,
+                           'RemoteB2',
+                           {'AccountId': str, 'ApplicationKey': str})
+
+
+b2Api = backblaze_b2.setupApi(b2conf)
+
+s = SecureIndex(conf, b2Api, 'as-Test01')
 s.getIndex()
