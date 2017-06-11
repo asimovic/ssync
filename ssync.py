@@ -1,8 +1,12 @@
-import os, sys, argparse
-from secure_index import SecureIndex
+import argparse
+import json
+import time
+
 import backblaze_b2
 import config
-
+from index.secure_index import IndexEntry
+from index.secure_index_factory import SecureIndex, SecureIndexFactory
+from sync.folder import LocalFolder
 
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GnuPGHome': str, 'IndexPath': str }
@@ -18,6 +22,26 @@ def createArgs():
 
 parser = createArgs()
 args = parser.parse_args()
+
+
+fl = []
+f = LocalFolder('C:\\')
+for f in f.all_files(None):
+    v = f.latest_version()
+    i = IndexEntry(v.id_, v.size, v.mod_time,
+                   '12345678901234567890123456789012',
+                   '1234567890123456789012345678901212345678901234567890123456789012',
+                   '1234567890123456789012345678901212345678901234567890123456789012')
+    fl.append(i)
+
+
+si = SecureIndex('index.sqlite')
+
+t1 = time.time()
+si.addAll(fl)
+t2 = time.time() - t1
+print (t2)
+
 
 conf = config.readConfig(CONFIG_PATH,
                          'SSync',

@@ -11,27 +11,20 @@ from b2.exception import CommandError
 from .folder import B2Folder, LocalFolder
 
 
-def parse_sync_folder(folder_name, api):
+def parseSyncDir(dirPath, api):
     """
-    Takes either a local path, or a B2 path, and returns a Folder
-    object for it.
+    Takes either a local path, or a B2 path, and returns a Folder object for it.
 
-    B2 paths look like: b2://bucketName/path/name.  The '//' is optional,
-    because the previous sync command didn't use it.
-
+    B2 paths look like: b2://bucketName/path/name.
     Anything else is treated like a local folder.
     """
-    if folder_name.startswith('b2://'):
-        return _parse_bucket_and_folder(folder_name[5:], api)
-    elif folder_name.startswith('b2:') and folder_name[3].isalnum():
-        return _parse_bucket_and_folder(folder_name[3:], api)
+    if dirPath.startswith('b2://'):
+        return __parseBucketAndFolder(dirPath[5:], api)
     else:
-        if folder_name.endswith('/'):
-            folder_name = folder_name[:-1]
-        return LocalFolder(folder_name)
+        return LocalFolder(dirPath)
 
 
-def _parse_bucket_and_folder(bucket_and_path, api):
+def __parseBucketAndFolder(bucket_and_path, api):
     """
     Turns 'my-bucket/foo' into B2Folder(my-bucket, foo)
     """

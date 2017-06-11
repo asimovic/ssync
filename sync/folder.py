@@ -70,14 +70,19 @@ class LocalFolder(AbstractFolder):
         if not isinstance(root, six.text_type):
             raise ValueError('folder path should be unicode: %s' % repr(root))
         self.root = os.path.abspath(root)
+        if not self.root.endswith(os.sep):
+            self.root = self.root + os.sep
 
     def folder_type(self):
         return 'local'
 
     def all_files(self, reporter):
-        prefix_len = len(self.root) + 1  # include trailing '/' in prefix length
+        prefix_len = len(self.root)
         for relative_path in self._walk_relative_paths(prefix_len, self.root, reporter):
-            yield self._make_file(relative_path)
+            try:
+                yield self._make_file(relative_path)
+            except:
+                print('Failed to read file: ' + relative_path)
 
     def make_full_path(self, file_name):
         return os.path.join(self.root, file_name.replace('/', os.path.sep))
@@ -107,7 +112,13 @@ class LocalFolder(AbstractFolder):
         # return unicode paths.
         names = {}  # name to (full_path, relative path)
         dirs = set()  # subset of names that are directories
-        for name in os.listdir(dir_path):
+        paths = []
+        try:
+            paths = os.listdir(dir_path)
+        except Exception:
+            print('Failed to get children of: ' + dir_path)
+
+        for name in paths:
             # We expect listdir() to return unicode if dir_path is unicode.
             # If the file name is not valid, based on the file system
             # encoding, then listdir() will return un-decoded str/bytes.
@@ -227,21 +238,23 @@ class B2Folder(AbstractFolder):
 
 class SecureFolder(AbstractFolder):
     """
-    Folder interface to B2.
+    Folder interface to B2 using the secureIndex.
     """
 
-    def __init__(self, bucket_name, folder_name, api):
-        self.bucket_name = bucket_name
-        self.folder_name = folder_name
-        self.bucket = api.get_bucket_by_name(bucket_name)
-        self.prefix = '' if self.folder_name == '' else self.folder_name + '/'
+    def __init__(self, path, secureIndex):
+        self.path = path
+        self.__secureIndex = secureIndex
 
     def all_files(self, reporter):
         current_name = None
         current_versions = []
+
+
+
         for (file_version_info, folder_name) in self.bucket.ls(
             self.folder_name, show_versions=True, recursive=True, fetch_count=1000
         ):
+
             assert file_version_info.file_name.startswith(self.prefix)
             if file_version_info.action == 'start':
                 continue

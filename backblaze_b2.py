@@ -47,22 +47,36 @@ def getModTimeFromFileInfo(fileInfo):
         return fileInfo['uploadTimestamp']
 
 
-def downloadSecureFile(conf, bucket: Bucket, fileId, destination):
+def downloadSecureFile(conf, api: B2Api, fileId, destination):
     tempPath = os.path.join(conf.temp, os.path.basename(destination))
     util.silentRemove(tempPath)
 
-    bucket.download_file_by_id(fileId, tempPath)
+    api.download_file_by_id(fileId, tempPath)
     util.uncompressAndDecrypt(conf, tempPath, destination)
     return 0
 
 
-def uploadSecureFile(conf, bucket: Bucket, source):
-    tempPath = os.path.join(conf.temp, os.path.basename(source))
-    util.silentRemove(tempPath)
+def uploadSecureFile(conf,
+                     bucket: Bucket,
+                     filepath,
+                     saveModTime=False,
+                     customName=None):
 
+    tempPath = os.path.join(conf.temp, os.path.basename(filepath))
+    util.silentRemove(tempPath)
     util.compressAndEncrypt(tempPath)
 
-    secureName = util.generateSecureName(source)
-    uploadSource = UploadSourceLocalFile(source)
-    bucket.upload(uploadSource, secureName)
+    if customName:
+        secureName = util.generateSecureName(customName)
+    else:
+        secureName = util.generateSecureName(filepath)
+
+    if saveModTime:
+        fileInfo = {SRC_LAST_MODIFIED_MILLIS: str(getModTimeFromFileInfo(filepath))}
+    else:
+        fileInfo = None
+
+    uploadSource = UploadSourceLocalFile(filepath)
+    bucket.upload(uploadSource, secureName, file_info=fileInfo)
+
     return 0

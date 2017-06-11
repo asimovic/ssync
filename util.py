@@ -1,8 +1,10 @@
-from argon2 import PasswordHasher
 import os
 import gzip
 import base64
-import shutil
+
+from argon2 import PasswordHasher
+from sqlalchemy.orm import sessionmaker
+from contextlib import contextmanager
 
 SECURE_NAME_SALT = 'c3ViamVjdHM'
 
@@ -20,7 +22,22 @@ def compressAndEncrypt(conf, filename):
 
 
 def uncompressAndDecrypt(conf, filename, destination):
+
+    silentRemove(destination)
     destination = None
+
+
+@contextmanager
+def session_scope(sessionMaker):
+    session = sessionMaker()
+    try:
+        yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def silentRemove(filename):
