@@ -14,7 +14,7 @@ import sys
 import six
 
 from .exception import EnvironmentEncodingError
-from .file import File, FileVersion
+from .pathentity import PathEntity, FileVersion
 from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 
 
@@ -78,9 +78,9 @@ class LocalFolder(AbstractFolder):
 
     def all_files(self, reporter):
         prefix_len = len(self.root)
-        for relative_path in self._walk_relative_paths(prefix_len, self.root, reporter):
+        for (relative_path, isDir) in self._walk_relative_paths(prefix_len, self.root, reporter):
             try:
-                yield self._make_file(relative_path)
+                yield self._make_file(relative_path, isDir)
             except:
                 print('Failed to read file: ' + relative_path)
 
@@ -149,10 +149,11 @@ class LocalFolder(AbstractFolder):
         for name in sorted(names):
             (full_path, relative_path) = names[name]
             if name in dirs:
+                yield (relative_path, True)
                 for rp in self._walk_relative_paths(prefix_len, full_path, reporter):
                     yield rp
             else:
-                yield relative_path
+                yield (relative_path, False)
 
     def _handle_non_unicode_file_name(self, name):
         """
@@ -171,14 +172,20 @@ class LocalFolder(AbstractFolder):
                 return name
         raise EnvironmentEncodingError(repr(name), sys.getfilesystemencoding())
 
-    def _make_file(self, relative_path):
+    def _make_file(self, relative_path, isDir):
         full_path = os.path.join(self.root, relative_path)
-        mod_time = int(round(os.path.getmtime(full_path) * 1000))
+        if not isDir:
+            mod_time = int(round(os.path.getmtime(full_path) * 1000))
+            size = os.path.getsize(full_path)
+        else:
+            full_path = full_path + '\\'
+            mod_time = None
+            size = 0
         slashes_path = six.u('/').join(relative_path.split(os.path.sep))
         version = FileVersion(
-            full_path, slashes_path, mod_time, "upload", os.path.getsize(full_path)
+            full_path, slashes_path, mod_time, "upload", size
         )
-        return File(slashes_path, [version])
+        return PathEntity(slashes_path, isDir, [version])
 
     def __repr__(self):
         return 'LocalFolder(%s)' % (self.root,)
@@ -206,7 +213,7 @@ class B2Folder(AbstractFolder):
                 continue
             file_name = file_version_info.file_name[len(self.prefix):]
             if current_name != file_name and current_name is not None:
-                yield File(current_name, current_versions)
+                yield PathEntity(current_name, False, current_versions)
                 current_versions = []
             file_info = file_version_info.file_info
             if SRC_LAST_MODIFIED_MILLIS in file_info:
@@ -221,7 +228,7 @@ class B2Folder(AbstractFolder):
             current_versions.append(file_version)
             current_name = file_name
         if current_name is not None:
-            yield File(current_name, current_versions)
+            yield PathEntity(current_name, False, current_versions)
 
     def folder_type(self):
         return 'b2'
@@ -249,7 +256,10 @@ class SecureFolder(AbstractFolder):
         current_name = None
         current_versions = []
 
-
+        for fileInfo in self.__secureIndex.getAll():
+            # If the folder exists in the index it should have the dir
+            if fileInfo.path < self.path:
+                continue
 
         for (file_version_info, folder_name) in self.bucket.ls(
             self.folder_name, show_versions=True, recursive=True, fetch_count=1000
@@ -260,7 +270,7 @@ class SecureFolder(AbstractFolder):
                 continue
             file_name = file_version_info.file_name[len(self.prefix):]
             if current_name != file_name and current_name is not None:
-                yield File(current_name, current_versions)
+                yield PathEntity(current_name, current_versions)
                 current_versions = []
             file_info = file_version_info.file_info
             if SRC_LAST_MODIFIED_MILLIS in file_info:
@@ -275,7 +285,7 @@ class SecureFolder(AbstractFolder):
             current_versions.append(file_version)
             current_name = file_name
         if current_name is not None:
-            yield File(current_name, current_versions)
+            yield PathEntity(current_name, current_versions)
 
     def folder_type(self):
         return 'b2'

@@ -8,19 +8,20 @@
 ######################################################################
 
 
-class File(object):
+class PathEntity(object):
     """
-    Holds information about one file in a folder.
+    Holds information about one file or dir.
 
-    The name is relative to the folder in all cases.
+    The name is relative to a folder in all cases.
 
     Files that have multiple versions (which only happens
     in B2, not in local folders) include information about
     all of the versions, most recent first.
     """
 
-    def __init__(self, name, versions):
+    def __init__(self, name, isDir, versions):
         self.name = name
+        self.isDir = isDir
         self.versions = versions
 
     def latest_version(self):

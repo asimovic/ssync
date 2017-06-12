@@ -4,13 +4,15 @@ from collections import OrderedDict
 import util
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 
 class IndexException(Exception):
     pass
+
+INDEX_TABLE_NAME = 'files'
 
 Base = declarative_base()
 
@@ -20,16 +22,18 @@ class IndexEntry(Base):
     The path is relative to the root in all cases.
     """
 
-    __tablename__ = 'files'
+    __tablename__ = INDEX_TABLE_NAME
     path = Column(String, primary_key=True)
+    isDir = Column(Boolean)
     size = Column(Integer)
     modTime = Column(Integer)
     md5 = Column(String)
     b2Id = Column(String)
     b2Name = Column(String)
 
-    def __init__(self, path, size, modTime, md5, b2Id, b2Name):
+    def __init__(self, path, isDir, size, modTime, md5, b2Id, b2Name):
         self.path = path
+        self.isDir = isDir
         self.size = size
         self.modTime = modTime
         self.md5 = md5
@@ -37,7 +41,7 @@ class IndexEntry(Base):
         self.b2Name = b2Name
 
     def __repr__(self):
-        return 'File(%s)' % self.path
+        return f'Index: {self.path}'
 
 class SecureIndex:
 
@@ -51,11 +55,10 @@ class SecureIndex:
 
 
     def getAll(self):
-        self.__lazyLoad()
+        self.__lazyLoad(False)
         if self.__sortedFiles is None:
             # Sort files by key (filepath), and return list of values (IndexEntry)
             self.__sortedFiles = [v for (k, v) in sorted(self.__files.items())]
-
         return self.__sortedFiles
 
     def add(self, file: IndexEntry):
@@ -80,15 +83,23 @@ class SecureIndex:
             for f in files:
                 self.__removeEntry(f, session)
 
+    def clear(self):
+        with util.session_scope(self.__sessionMaker) as session:
+            session.execute('DELETE FROM ' + INDEX_TABLE_NAME)
+        self.__files = None
+        self.__lazyLoad()
 
-    def __lazyLoad(self):
+
+    def __lazyLoad(self, updating=True):
         # Files are being updates so clear the sorted cache
-        self.__sortedFiles = None
+        if updating:
+            self.__sortedFiles = None
         if self.__files is None:
             self.__files = {}
             with util.session_scope(self.__sessionMaker) as session:
                 for f in session.query(IndexEntry):
                     self.__files[f.path] = f
+                session.expunge_all()
 
     def __removeEntry(self, file, session):
         if file.path in self.__files:

@@ -6,7 +6,8 @@ import backblaze_b2
 import config
 from index.secure_index import IndexEntry
 from index.secure_index_factory import SecureIndex, SecureIndexFactory
-from sync.folder import LocalFolder
+from sync import folder_parser
+from sync.folder import LocalFolder, SecureFolder
 
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GnuPGHome': str, 'IndexPath': str }
@@ -23,9 +24,8 @@ def createArgs():
 parser = createArgs()
 args = parser.parse_args()
 
-
 fl = []
-f = LocalFolder('C:\\')
+f = LocalFolder('C:\\AMD')
 for f in f.all_files(None):
     v = f.latest_version()
     i = IndexEntry(v.id_, v.size, v.mod_time,
@@ -36,11 +36,18 @@ for f in f.all_files(None):
 
 
 si = SecureIndex('index.sqlite')
+si.clear()
 
 t1 = time.time()
 si.addAll(fl)
 t2 = time.time() - t1
 print (t2)
+
+
+sf = SecureFolder('c:\\AMD\\Packages', si)
+ff = list(sf.all_files(None))
+
+fp = folder_parser.parseSyncDir('b2://hello/folder/', None)
 
 
 conf = config.readConfig(CONFIG_PATH,
