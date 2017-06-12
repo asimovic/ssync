@@ -6,8 +6,9 @@
 # Modified by: Alex Simovic
 #
 ######################################################################
+from functools import total_ordering
 
-
+@total_ordering
 class PathEntity(object):
     """
     Holds information about one file or dir.
@@ -19,13 +20,25 @@ class PathEntity(object):
     all of the versions, most recent first.
     """
 
-    def __init__(self, name, isDir, versions):
-        self.name = name
+    def __init__(self, path, relativePath, isDir, versions):
+        self.path = path
+        self.relativePath = relativePath
         self.isDir = isDir
         self.versions = versions
 
     def latest_version(self):
         return self.versions[0]
+
+    def __eq__(self, other):
+        return self.isDir == other.isDir and \
+               self.path.lower() == other.path.lower()
+
+    def __le__(self, other):
+        if self.isDir and not other.isDir:
+            return True
+        if not self.isDir and other.isDir:
+            return False
+        return self.path.lower() < other.path.lower()
 
     def __repr__(self):
         return 'File(%s, [%s])' % (self.name, ', '.join(repr(v) for v in self.versions))
@@ -41,14 +54,13 @@ class FileVersion(object):
        action - "hide" or "upload" (never "start")
     """
 
-    def __init__(self, id_, file_name, mod_time, action, size):
+    def __init__(self, id_, size, mod_time, action):
         self.id_ = id_
-        self.name = file_name
+        self.size = size
         self.mod_time = mod_time
         self.action = action
-        self.size = size
 
     def __repr__(self):
         return 'FileVersion(%s, %s, %s, %s)' % (
-            repr(self.id_), repr(self.name), repr(self.mod_time), repr(self.action)
+            repr(self.id_), repr(self.mod_time), repr(self.action)
         )

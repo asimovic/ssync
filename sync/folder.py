@@ -14,7 +14,7 @@ import sys
 import six
 
 from .exception import EnvironmentEncodingError
-from .pathentity import PathEntity, FileVersion
+from .path_entity import PathEntity, FileVersion
 from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 
 
@@ -78,11 +78,11 @@ class LocalFolder(AbstractFolder):
 
     def all_files(self, reporter):
         prefix_len = len(self.root)
-        for (relative_path, isDir) in self._walk_relative_paths(prefix_len, self.root, reporter):
+        for (full_path, relative_path, isDir) in self.__walk_relative_paths(prefix_len, self.root, reporter):
             try:
-                yield self._make_file(relative_path, isDir)
+                yield self.__makePathEntity(full_path, relative_path, isDir)
             except:
-                print('Failed to read file: ' + relative_path)
+                print('Failed to create path entity: ' + full_path)
 
     def make_full_path(self, file_name):
         return os.path.join(self.root, file_name.replace('/', os.path.sep))
@@ -99,7 +99,7 @@ class LocalFolder(AbstractFolder):
         elif not os.path.isdir(self.root):
             raise Exception('%s is not a directory' % (self.root,))
 
-    def _walk_relative_paths(self, prefix_len, dir_path, reporter):
+    def __walk_relative_paths(self, prefix_len, dir_path, reporter):
         """
         Yields all of the file names anywhere under this folder, in the
         order they would appear in B2.
@@ -111,7 +111,6 @@ class LocalFolder(AbstractFolder):
         # We know the dir_path is unicode, which will cause os.listdir() to
         # return unicode paths.
         names = {}  # name to (full_path, relative path)
-        dirs = set()  # subset of names that are directories
         paths = []
         try:
             paths = os.listdir(dir_path)
@@ -123,15 +122,11 @@ class LocalFolder(AbstractFolder):
             # If the file name is not valid, based on the file system
             # encoding, then listdir() will return un-decoded str/bytes.
             if not isinstance(name, six.text_type):
-                name = self._handle_non_unicode_file_name(name)
+                name = self.__handle_non_unicode_file_name(name)
 
-            if '/' in name:
-                raise Exception(
-                    "sync does not support file names that include '/': %s in dir %s" %
-                    (name, dir_path)
-                )
             full_path = os.path.join(dir_path, name)
             relative_path = full_path[prefix_len:]
+
             # Skip broken symlinks or other inaccessible files
             if not os.path.exists(full_path):
                 if reporter is not None:
@@ -141,26 +136,27 @@ class LocalFolder(AbstractFolder):
                     reporter.local_permission_error(full_path)
             else:
                 if os.path.isdir(full_path):
-                    name += six.u('/')
-                    dirs.add(name)
+                    name += os.sep
+                    full_path += os.sep
+                    relative_path += os.sep
                 names[name] = (full_path, relative_path)
 
         # Yield all of the answers
         for name in sorted(names):
             (full_path, relative_path) = names[name]
-            if name in dirs:
-                yield (relative_path, True)
-                for rp in self._walk_relative_paths(prefix_len, full_path, reporter):
+            if name.endswith(os.sep):
+                yield (full_path, relative_path, True)
+                for rp in self.__walk_relative_paths(prefix_len, full_path, reporter):
                     yield rp
             else:
-                yield (relative_path, False)
+                yield (full_path, relative_path, False)
 
-    def _handle_non_unicode_file_name(self, name):
+    def __handle_non_unicode_file_name(self, name):
         """
         Decide what to do with a name returned from os.listdir()
         that isn't unicode.  We think that this only happens when
         the file name can't be decoded using the file system
-        encoding.  Just in case that's not true, we'll allow all-ascii
+        encoding. Just in case that's not true, we'll allow all-ascii
         names.
         """
         # if it's all ascii, allow it
@@ -172,23 +168,21 @@ class LocalFolder(AbstractFolder):
                 return name
         raise EnvironmentEncodingError(repr(name), sys.getfilesystemencoding())
 
-    def _make_file(self, relative_path, isDir):
-        full_path = os.path.join(self.root, relative_path)
-        if not isDir:
+    def __makePathEntity(self, full_path, relative_path, isDir):
+        # Normalize path separators to match b2
+        normalRelativePath = relative_path.replace('\\', '/')
+
+        if isDir:
+            version = None
+        else:
             mod_time = int(round(os.path.getmtime(full_path) * 1000))
             size = os.path.getsize(full_path)
-        else:
-            full_path = full_path + '\\'
-            mod_time = None
-            size = 0
-        slashes_path = six.u('/').join(relative_path.split(os.path.sep))
-        version = FileVersion(
-            full_path, slashes_path, mod_time, "upload", size
-        )
-        return PathEntity(slashes_path, isDir, [version])
+            version = FileVersion(full_path, mod_time, "upload", size)
+
+        return PathEntity(full_path, normalRelativePath, isDir, [version])
 
     def __repr__(self):
-        return 'LocalFolder(%s)' % (self.root,)
+        return 'LocalFolder(%s)' % self.root
 
 
 class B2Folder(AbstractFolder):

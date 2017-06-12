@@ -1,13 +1,11 @@
 import os
-from collections import OrderedDict
-
 import util
 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, Boolean
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
+from functools import total_ordering
 
 class IndexException(Exception):
     pass
@@ -16,6 +14,7 @@ INDEX_TABLE_NAME = 'files'
 
 Base = declarative_base()
 
+@total_ordering
 class IndexEntry(Base):
     """
     Holds information about one file in a the index.
@@ -40,6 +39,18 @@ class IndexEntry(Base):
         self.b2Id = b2Id
         self.b2Name = b2Name
 
+    def __eq__(self, other):
+        return self.isDir == other.isDir and \
+               self.path.lower() == other.path.lower()
+
+    def __le__(self, other):
+        d1 = self.path.count('/')
+        d2 = other.path.count('/')
+
+        if d1 > d2:
+            return not self.path.startswith(other.path)
+        return self.path.lower() < other.path.lower()
+
     def __repr__(self):
         return f'Index: {self.path}'
 
@@ -58,19 +69,21 @@ class SecureIndex:
         self.__lazyLoad(False)
         if self.__sortedFiles is None:
             # Sort files by key (filepath), and return list of values (IndexEntry)
-            self.__sortedFiles = [v for (k, v) in sorted(self.__files.items())]
+            self.__sortedFiles = [v for (k, v) in sorted(self.__files.items(), key=lambda x: x[1])]
         return self.__sortedFiles
 
     def add(self, file: IndexEntry):
         self.__lazyLoad()
         with util.session_scope(self.__sessionMaker) as session:
             self.__addEntry(file, session)
+            session.expunge_all()
 
     def addAll(self, files):
         self.__lazyLoad()
         with util.session_scope(self.__sessionMaker) as session:
             for f in files:
                 self.__addEntry(f, session)
+            session.expunge_all()
 
     def remove(self, file: IndexEntry):
         self.__lazyLoad()
