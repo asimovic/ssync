@@ -13,7 +13,7 @@ class SecureIndexFactory:
         self.api = api
         self.bucket_name = bucket_name
 
-    def getName(self):
+    def __getName(self):
         return self.bucket_name + '\index'
 
     # Find, create or download a local index
@@ -26,7 +26,7 @@ class SecureIndexFactory:
         if os.path.exists(self.conf.IndexPath):
             localModTime = util.getModTime(self.conf.IndexPath)
 
-        indexName = util.generateSecureName(self.getName())
+        indexName = util.generateSecureName(self.__getName())
 
         #get file info from b2
         if self.conf.IndexFileId:
@@ -48,5 +48,5 @@ class SecureIndexFactory:
                                       self.bucket_name,
                                       self.conf.IndexPath,
                                       saveModTime=True,
-                                      customName=self.getName())
+                                      customName=self.__getName())
 

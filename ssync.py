@@ -2,6 +2,8 @@ import argparse
 import json
 import time
 
+from sync import sync
+
 import backblaze_b2
 import config
 from index.secure_index import IndexEntry
@@ -49,7 +51,6 @@ si.addAll(fl)
 t2 = time.time() - t1
 print (t2)
 
-
 sf = SecureFolder('Packages/', si)
 ff = list(sf.all_files(None))
 
@@ -65,8 +66,9 @@ b2conf = config.readConfig(CONFIG_PATH,
                            'RemoteB2',
                            {'AccountId': str, 'ApplicationKey': str})
 
-
 b2Api = backblaze_b2.setupApi(b2conf)
+
+
 
 s = SecureIndex(conf, b2Api, 'as-Test01')
 s.getIndex()

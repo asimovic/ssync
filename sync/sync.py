@@ -15,7 +15,7 @@ import six
 import threading
 
 from b2.exception import CommandError
-from .policy_manager import POLICY_MANAGER
+from .policy_manager import POLICY_MANAGER, SyncType
 from .report import SyncReport
 
 try:
@@ -26,17 +26,14 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def next_or_none(iterator):
-    """
-    Returns the next item from the iterator, or None if there are no more.
-    """
+def __nextOrNone(iterator):
     try:
-        return six.advance_iterator(iterator)
+        return next(iterator)
     except StopIteration:
         return None
 
 
-def _filter_folder(folder, reporter, exclusions, inclusions):
+def __filter_folder(folder, reporter, exclusions, inclusions):
     """
     Filters a folder through a list of exclusions and inclusions.
     Inclusions override exclusions.
@@ -54,7 +51,7 @@ def _filter_folder(folder, reporter, exclusions, inclusions):
         yield f
 
 
-def iter_folders(folder_a, folder_b, reporter, exclusions=tuple(), inclusions=tuple()):
+def __iter_folders(folder_a, folder_b, reporter, exclusions=tuple(), inclusions=tuple()):
     """
     An iterator over all of the files in the union of two folders,
     matching file names.
@@ -66,46 +63,44 @@ def iter_folders(folder_a, folder_b, reporter, exclusions=tuple(), inclusions=tu
     :param folder_b: A Folder object.
     """
 
-    iter_a = _filter_folder(folder_a, reporter, exclusions, inclusions)
+    iter_a = __filter_folder(folder_a, reporter, exclusions, inclusions)
     iter_b = folder_b.all_files(reporter)
 
-    current_a = next_or_none(iter_a)
-    current_b = next_or_none(iter_b)
+    current_a = __nextOrNone(iter_a)
+    current_b = __nextOrNone(iter_b)
     while current_a is not None or current_b is not None:
         if current_a is None:
             yield (None, current_b)
-            current_b = next_or_none(iter_b)
+            current_b = __nextOrNone(iter_b)
         elif current_b is None:
             yield (current_a, None)
-            current_a = next_or_none(iter_a)
+            current_a = __nextOrNone(iter_a)
         elif current_a.name < current_b.name:
             yield (current_a, None)
-            current_a = next_or_none(iter_a)
+            current_a = __nextOrNone(iter_a)
         elif current_b.name < current_a.name:
             yield (None, current_b)
-            current_b = next_or_none(iter_b)
+            current_b = __nextOrNone(iter_b)
         else:
             assert current_a.name == current_b.name
             yield (current_a, current_b)
-            current_a = next_or_none(iter_a)
-            current_b = next_or_none(iter_b)
+            current_a = __nextOrNone(iter_a)
+            current_b = __nextOrNone(iter_b)
 
 
-def make_file_sync_actions(
-    sync_type, source_file, dest_file, source_folder, dest_folder, args, now_millis
-):
+def __make_file_sync_actions(sourceDir, source_file, destinationDir, dest_file,
+                             syncType, now_millis, args):
     """
     Yields the sequence of actions needed to sync the two files
     """
 
-    policy = POLICY_MANAGER.get_policy(
-        sync_type, source_file, source_folder, dest_file, dest_folder, now_millis, args
-    )
-    for action in policy.get_all_actions():
+    policy = POLICY_MANAGER.createPolicy(sourceDir, source_file, destinationDir, dest_file,
+                                         syncType, now_millis, args)
+    for action in policy.getAllActions():
         yield action
 
 
-def make_folder_sync_actions(source_folder, dest_folder, args, now_millis, reporter):
+def __make_folder_sync_actions(sourceDir, destinationDir, args, now_millis, reporter):
     """
     Yields a sequence of actions that will sync the destination
     folder to the source folder.
@@ -113,40 +108,31 @@ def make_folder_sync_actions(source_folder, dest_folder, args, now_millis, repor
     if args.skipNewer and args.replaceNewer:
         raise CommandError('--skipNewer and --replaceNewer are incompatible')
 
-    if args.delete and (args.keepDays is not None):
-        raise CommandError('--delete and --keepDays are incompatible')
-
-    if (args.keepDays is not None) and (dest_folder.folder_type() == 'local'):
-        raise CommandError('--keepDays cannot be used for local files')
-
     exclusions = [re.compile(ex) for ex in args.excludeRegex]
     inclusions = [re.compile(inc) for inc in args.includeRegex]
 
-    source_type = source_folder.folder_type()
-    dest_type = dest_folder.folder_type()
-    sync_type = '%s-to-%s' % (source_type, dest_type)
-    if (source_folder.folder_type(), dest_folder.folder_type()) not in [
-        ('b2', 'local'), ('local', 'b2')
+    if (sourceDir.type(), destinationDir.type()) not in [
+        ('sec', 'local'), ('local', 'sec')
     ]:
         raise NotImplementedError("Sync support only local-to-b2 and b2-to-local")
+    syncType = SyncType.UPLOAD if sourceDir.type() == 'local' else SyncType.DOWNLOAD
 
     for (source_file, dest_file) in \
-            iter_folders(source_folder, dest_folder, reporter, exclusions, inclusions):
+            __iter_folders(sourceDir, destinationDir, reporter, exclusions, inclusions):
         if source_file is None:
             logging.debug('determined that %s is not present on source', dest_file)
         elif dest_file is None:
             logging.debug('determined that %s is not present on destination', source_file)
 
-        if source_folder.folder_type() == 'local':
+        if sourceDir.type() == 'local':
             if source_file is not None:
                 reporter.update_compare(1)
         else:
             if dest_file is not None:
                 reporter.update_compare(1)
 
-        for action in make_file_sync_actions(
-            sync_type, source_file, dest_file, source_folder, dest_folder, args, now_millis
-        ):
+        for action in __make_file_sync_actions(sourceDir, source_file, destinationDir, dest_file,
+                                               syncType, now_millis, args):
             yield action
 
 
@@ -200,12 +186,11 @@ def sync_folders(
 ):
     """
     Syncs two folders.  Always ensures that every file in the
-    source is also in the destination.  Deletes any file versions
-    in the destination older than history_days.
+    source is also in the destination.
     """
 
     # For downloads, make sure that the target directory is there.
-    if dest_folder.folder_type() == 'local' and not dry_run:
+    if dest_folder.type() == 'local' and not dry_run:
         dest_folder.ensure_present()
 
     # Make a reporter to report progress.
@@ -224,29 +209,28 @@ def sync_folders(
 
         # First, start the thread that counts the local files.  That's the operation
         # that should be fastest, and it provides scale for the progress reporting.
-        local_folder = None
-        if source_folder.folder_type() == 'local':
-            local_folder = source_folder
-        if dest_folder.folder_type() == 'local':
-            local_folder = dest_folder
-        if local_folder is None:
+        localFolder = None
+        if source_folder.type() == 'local':
+            localFolder = source_folder
+        if dest_folder.type() == 'local':
+            localFolder = dest_folder
+        if localFolder is None:
             raise ValueError('neither folder is a local folder')
-        sync_executor.submit(count_files, local_folder, reporter)
+        sync_executor.submit(count_files, localFolder, reporter)
 
         # Schedule each of the actions
-        bucket = None
-        if source_folder.folder_type() == 'b2':
-            bucket = source_folder.bucket
-        if dest_folder.folder_type() == 'b2':
-            bucket = dest_folder.bucket
-        if bucket is None:
+        remoteFolder = None
+        if source_folder.type() == 'sec':
+            remoteFolder = source_folder
+        if dest_folder.type() == 'sec':
+            remoteFolder = dest_folder
+        if remoteFolder is None:
             raise ValueError('neither folder is a b2 folder')
+
         action_futures = []
         total_files = 0
         total_bytes = 0
-        for action in make_folder_sync_actions(
-            source_folder, dest_folder, args, now_millis, reporter
-        ):
+        for action in __make_folder_sync_actions(source_folder, dest_folder, args, now_millis, reporter):
             logging.debug('scheduling action %s on bucket %s')
             future = sync_executor.submit(action.run, bucket, reporter, dry_run)
             action_futures.append(future)

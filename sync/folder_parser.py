@@ -7,11 +7,13 @@
 #
 ######################################################################
 
+import util
 from b2.exception import CommandError
-from .folder import B2Folder, LocalFolder
+from index.secure_index_factory import SecureIndexFactory
+from .folder import LocalFolder, SecureFolder
 
 
-def parseSyncDir(dirPath, api):
+def parseSyncDir(dirPath, conf, api):
     """
     Takes either a local path, or a B2 path, and returns a Folder object for it.
 
@@ -19,12 +21,12 @@ def parseSyncDir(dirPath, api):
     Anything else is treated like a local folder.
     """
     if dirPath.startswith('b2://'):
-        return __parseBucketAndFolder(dirPath[5:], api)
+        return __parseSecureB2Folder(dirPath, conf, api)
     else:
         return LocalFolder(dirPath)
 
 
-def __parseBucketAndFolder(bucket_and_path, api):
+def __parseB2Folder(bucket_and_path, api):
     """
     Turns 'my-bucket/foo' into B2Folder(my-bucket, foo)
     """
@@ -38,3 +40,24 @@ def __parseBucketAndFolder(bucket_and_path, api):
     if folder_name.endswith('/'):
         folder_name = folder_name[:-1]
     return B2Folder(bucket_name, folder_name, api)
+
+
+def __parseSecureB2Folder(path, conf, api):
+    """
+    Turns 'b2://my-bucket/foo' into a secure folder
+    """
+    if not path.startswith('b2://'):
+        raise CommandError("invalid b2 path, should start with 'b2://': " + path)
+    path = util.normalizePath(path[5:], True)
+    if '//' in path:
+        raise CommandError("'//' not allowed in path names")
+    if path.count('/', 0, -1) == 0:
+        bucketName = path
+        folderName = ''
+    else:
+        (bucketName, folderName) = path.split('/', 1)
+
+    sif = SecureIndexFactory(conf, api, bucketName)
+    s = sif.getIndex()
+
+    return SecureFolder(folderName, s)

@@ -10,16 +10,15 @@
 from abc import ABCMeta, abstractmethod
 import os
 import sys
-import six
 import util
+from sync import path_entity
 
 from .exception import EnvironmentEncodingError
 from .path_entity import PathEntity, FileVersion
 from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 
 
-@six.add_metaclass(ABCMeta)
-class AbstractFolder(object):
+class AbstractFolder(metaclass=ABCMeta):
     """
     Interface to a folder full of files, which might be a B2 bucket,
     a virtual folder in a B2 bucket, or a directory on a local file
@@ -44,13 +43,21 @@ class AbstractFolder(object):
         """
 
     @abstractmethod
-    def folder_type(self):
+    def type(self):
         """
         Returns one of:  'b2', 'local'
         """
 
     @abstractmethod
-    def make_full_path(self, file_name):
+    def updateHashForSubFile(self, fileEntity):
+        """
+        Try and update the md5 hash of the file, file should belong to this folder
+        :param fileEntity:
+        :return:
+        """
+
+    @abstractmethod
+    def getFullPathForSubFile(self, fileEntity):
         """
         Only for local folders, returns the full path to the file.
         """
@@ -61,50 +68,49 @@ class LocalFolder(AbstractFolder):
     Folder interface to a directory on the local machine.
     """
 
-    def __init__(self, root):
+    def __init__(self, path):
         """
         Initializes a new folder.
 
         :param root: Path to the root of the local folder.  Must be unicode.
         """
-        if not isinstance(root, six.text_type):
-            raise ValueError('folder path should be unicode: %s' % repr(root))
-        self.root = os.path.abspath(root)
-        if not self.root.endswith(os.sep):
-            self.root = self.root + os.sep
+        if not isinstance(path, str):
+            raise ValueError('folder path should be unicode: %s' % repr(path))
+        self.path = os.path.abspath(path)
+        if not self.path.endswith(os.sep):
+            self.path += os.sep
 
-    def folder_type(self):
+    def type(self):
         return 'local'
 
     def all_files(self, reporter):
-        prefix_len = len(self.root)
-        for (full_path, relative_path, isDir) in self.__walk_relative_paths(prefix_len, self.root, reporter):
+        for (full_path, isDir) in self.__walk_relative_paths(self.path, reporter):
             try:
-                yield self.__makePathEntity(full_path, relative_path, isDir)
+                yield self.__makePathEntity(full_path, isDir)
             except:
                 print('Failed to create path entity: ' + full_path)
 
-    def make_full_path(self, file_name):
-        return os.path.join(self.root, file_name.replace('/', os.path.sep))
+    def getFullPathForSubFile(self, fileEntity):
+        return os.path.join(self.path, fileEntity.relativePath.replace('/', os.path.sep))
 
     def ensure_present(self):
         """
         Makes sure that the directory exists.
         """
-        if not os.path.exists(self.root):
+        if not os.path.exists(self.path):
             try:
-                os.mkdir(self.root)
+                os.mkdir(self.path)
             except:
-                raise Exception('unable to create directory %s' % (self.root,))
-        elif not os.path.isdir(self.root):
-            raise Exception('%s is not a directory' % (self.root,))
+                raise Exception('unable to create directory %s' % (self.path,))
+        elif not os.path.isdir(self.path):
+            raise Exception('%s is not a directory' % (self.path,))
 
-    def __walk_relative_paths(self, prefix_len, dir_path, reporter):
+    def __walk_relative_paths(self, dir_path, reporter):
         """
         Yields all of the file names anywhere under this folder, in the
-        order they would appear in B2.
+        order they would appear in B2. String sorting order.
         """
-        if not isinstance(dir_path, six.text_type):
+        if not isinstance(dir_path, str):
             raise ValueError('folder path should be unicode: %s' % repr(dir_path))
 
         # Collect the names
@@ -121,11 +127,10 @@ class LocalFolder(AbstractFolder):
             # We expect listdir() to return unicode if dir_path is unicode.
             # If the file name is not valid, based on the file system
             # encoding, then listdir() will return un-decoded str/bytes.
-            if not isinstance(name, six.text_type):
+            if not isinstance(name, str):
                 name = self.__handle_non_unicode_file_name(name)
 
             full_path = os.path.join(dir_path, name)
-            relative_path = full_path[prefix_len:]
 
             # Skip broken symlinks or other inaccessible files
             if not os.path.exists(full_path):
@@ -138,18 +143,17 @@ class LocalFolder(AbstractFolder):
                 if os.path.isdir(full_path):
                     name += os.sep
                     full_path += os.sep
-                    relative_path += os.sep
-                names[name] = (full_path, relative_path)
+                names[name] = full_path
 
         # Yield all of the answers
         for name in sorted(names):
-            (full_path, relative_path) = names[name]
+            full_path = names[name]
             if name.endswith(os.sep):
-                yield (full_path, relative_path, True)
-                for rp in self.__walk_relative_paths(prefix_len, full_path, reporter):
+                yield (full_path, True)
+                for rp in self.__walk_relative_paths(full_path, reporter):
                     yield rp
             else:
-                yield (full_path, relative_path, False)
+                yield (full_path, False)
 
     def __handle_non_unicode_file_name(self, name):
         """
@@ -160,29 +164,31 @@ class LocalFolder(AbstractFolder):
         names.
         """
         # if it's all ascii, allow it
-        if six.PY2:
-            if all(ord(c) <= 127 for c in name):
-                return name
-        else:
-            if all(b <= 127 for b in name):
-                return name
+        if all(b <= 127 for b in name):
+            return name
         raise EnvironmentEncodingError(repr(name), sys.getfilesystemencoding())
 
-    def __makePathEntity(self, full_path, relative_path, isDir):
+    def __makePathEntity(self, fullPath, isDir):
+        relativePath = fullPath[len(self.path):]
         # Normalize path separators to match b2
-        normalRelativePath = util.normalizePath(relative_path, isDir)
+        normalRelativePath = util.normalizePath(relativePath, isDir)
 
         if isDir:
             version = None
         else:
-            mod_time = int(round(os.path.getmtime(full_path) * 1000))
-            size = os.path.getsize(full_path)
-            version = FileVersion(full_path, mod_time, "upload", size)
+            mod_time = int(round(os.path.getmtime(fullPath) * 1000))
+            size = os.path.getsize(fullPath)
+            version = FileVersion(fullPath, mod_time, "upload", size)
 
-        return PathEntity(full_path, normalRelativePath, isDir, [version])
+        return PathEntity(fullPath, normalRelativePath, isDir, [version])
+
+    def updateHashForSubFile(self, pathEntity):
+        if not pathEntity.hash and not pathEntity.isDir:
+            pathEntity.hash = util.calculateHash(pathEntity.nativePath)
+        return pathEntity.hash
 
     def __repr__(self):
-        return 'LocalFolder: ' + self.root
+        return 'LocalFolder: ' + self.path
 
 
 class SecureFolder(AbstractFolder):
@@ -190,88 +196,97 @@ class SecureFolder(AbstractFolder):
     Folder interface using the secureIndex.
 
     :param path: relative path to folder. Root should be the same path as the index root.
+    :param secureIndex: secure index containing normalized path names
     """
 
     def __init__(self, path, secureIndex):
-        self.path = util.normalizePath(path, True).lower()
+        self.path = util.normalizePath(path, True)
         self.__secureIndex = secureIndex
 
     def all_files(self, reporter):
         for fileInfo in self.__secureIndex.getAll():
-            # Index is sorted by name so try and find the dir and start from there
-            if fileInfo < self.path:
-                continue
-            # We either passed all of the files in this folder or there were none
-            if not fileInfo.path.startswith(self.path.lower()):
-                break;
+            if self.path != '':
+                # Index is sorted by name so try and find the dir and start from there
+                if fileInfo < self.path:
+                    continue
+                # We either passed all of the files in this folder or there were none
+                if not fileInfo.path.startswith(self.path.lower()):
+                    break;
 
-            version = FileVersion((fileInfo.remoteId, fileInfo.remoteName), fileInfo.size,
+            version = FileVersion(fileInfo.remoteId, fileInfo.size,
                 fileInfo.modTime, fileInfo.md5)
-            pathEntity = PathEntity(fileInfo.path, fileInfo.path,
-                fileInfo.isDir, [version])
+            pathEntity = PathEntity(fileInfo.remoteName, fileInfo.path, fileInfo.isDir, [version])
 
             yield pathEntity
 
-    def folder_type(self):
+    def type(self):
         return 'sec'
 
-    def make_full_path(self, filename):
+    def getFullPathForSubFile(self, fileEntity):
         if self.path == '':
-            return filename
+            return fileEntity.relativePath
         else:
-            return self.path + '/' + filename
+            return self.path + '/' + fileEntity.relativePath
+
+    def updateHashForSubFile(self, pathEntity):
+        # Try to get hash from the index, but it should always have one already
+        if not pathEntity.hash:
+            indexPE = self.__secureIndex.get(pathEntity.relativePath)
+            if indexPE is not None:
+                pathEntity.hash = indexPE.hash
+        return pathEntity.hash
 
     def __str__(self):
         return 'SecFolder: ' + self.path
 
 
-class B2Folder(AbstractFolder):
-    """
-    Folder interface to B2.
-    """
-
-    def __init__(self, bucket_name, folder_name, api):
-        self.bucket_name = bucket_name
-        self.folder_name = folder_name
-        self.bucket = api.get_bucket_by_name(bucket_name)
-        self.prefix = '' if self.folder_name == '' else self.folder_name + '/'
-
-    def all_files(self, reporter):
-        current_name = None
-        current_versions = []
-        for (file_version_info, folder_name) in self.bucket.ls(
-            self.folder_name, show_versions=True, recursive=True, fetch_count=1000
-        ):
-            assert file_version_info.file_name.startswith(self.prefix)
-            if file_version_info.action == 'start':
-                continue
-            file_name = file_version_info.file_name[len(self.prefix):]
-            if current_name != file_name and current_name is not None:
-                yield PathEntity(current_name, False, current_versions)
-                current_versions = []
-            file_info = file_version_info.file_info
-            if SRC_LAST_MODIFIED_MILLIS in file_info:
-                mod_time_millis = int(file_info[SRC_LAST_MODIFIED_MILLIS])
-            else:
-                mod_time_millis = file_version_info.upload_timestamp
-            assert file_version_info.size is not None
-            file_version = FileVersion(
-                file_version_info.id_, file_version_info.file_name, mod_time_millis,
-                file_version_info.action, file_version_info.size
-            )
-            current_versions.append(file_version)
-            current_name = file_name
-        if current_name is not None:
-            yield PathEntity(current_name, False, current_versions)
-
-    def folder_type(self):
-        return 'b2'
-
-    def make_full_path(self, file_name):
-        if self.folder_name == '':
-            return file_name
-        else:
-            return self.folder_name + '/' + file_name
-
-    def __str__(self):
-        return 'B2Folder(%s, %s)' % (self.bucket_name, self.folder_name)
+# class B2Folder(AbstractFolder):
+#     """
+#     Folder interface to B2.
+#     """
+#
+#     def __init__(self, bucket_name, folder_name, api):
+#         self.bucket_name = bucket_name
+#         self.folder_name = folder_name
+#         self.bucket = api.get_bucket_by_name(bucket_name)
+#         self.prefix = '' if self.folder_name == '' else self.folder_name + '/'
+#
+#     def all_files(self, reporter):
+#         current_name = None
+#         current_versions = []
+#         for (file_version_info, folder_name) in self.bucket.ls(
+#             self.folder_name, show_versions=True, recursive=True, fetch_count=1000
+#         ):
+#             assert file_version_info.file_name.startswith(self.prefix)
+#             if file_version_info.action == 'start':
+#                 continue
+#             file_name = file_version_info.file_name[len(self.prefix):]
+#             if current_name != file_name and current_name is not None:
+#                 yield PathEntity(current_name, False, current_versions)
+#                 current_versions = []
+#             file_info = file_version_info.file_info
+#             if SRC_LAST_MODIFIED_MILLIS in file_info:
+#                 mod_time_millis = int(file_info[SRC_LAST_MODIFIED_MILLIS])
+#             else:
+#                 mod_time_millis = file_version_info.upload_timestamp
+#             assert file_version_info.size is not None
+#             file_version = FileVersion(
+#                 file_version_info.id_, file_version_info.file_name, mod_time_millis,
+#                 file_version_info.action, file_version_info.size
+#             )
+#             current_versions.append(file_version)
+#             current_name = file_name
+#         if current_name is not None:
+#             yield PathEntity(current_name, False, current_versions)
+#
+#     def folder_type(self):
+#         return 'b2'
+#
+#     def make_full_path(self, file_name):
+#         if self.folder_name == '':
+#             return file_name
+#         else:
+#             return self.folder_name + '/' + file_name
+#
+#     def __str__(self):
+#         return 'B2Folder(%s, %s)' % (self.bucket_name, self.folder_name)

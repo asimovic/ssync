@@ -17,6 +17,9 @@ from b2.download_dest import DownloadDestLocalFile
 from b2.upload_source import UploadSourceLocalFile
 from b2.utils import raise_if_shutting_down
 from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
+
+import backblaze_b2
+import util
 from .report import SyncFileReporter
 
 logger = logging.getLogger(__name__)
@@ -65,30 +68,70 @@ class AbstractAction(object):
 
 
 class B2UploadAction(AbstractAction):
-    def __init__(self, local_full_path, relative_name, b2_file_name, mod_time_millis, size):
-        self.local_full_path = local_full_path
-        self.relative_name = relative_name
-        self.b2_file_name = b2_file_name
-        self.mod_time_millis = mod_time_millis
+    def __init__(self, localPath, relativeName, size):
+        self.localPath = localPath
+        self.relativeName = relativeName
         self.size = size
 
     def get_bytes(self):
         return self.size
 
     def do_action(self, bucket, reporter):
+        b2Name = util.generateSecureName(self.relativeName)
+
         bucket.upload(
-            UploadSourceLocalFile(self.local_full_path),
-            self.b2_file_name,
-            file_info={SRC_LAST_MODIFIED_MILLIS: str(self.mod_time_millis)},
+            UploadSourceLocalFile(self.localPath),
+            b2Name,
             progress_listener=SyncFileReporter(reporter)
         )
 
     def do_report(self, bucket, reporter):
-        reporter.print_completion('upload ' + self.relative_name)
+        reporter.print_completion('upload from ' + self.localPath)
 
     def __str__(self):
-        return 'b2_upload(%s, %s, %s)' % (
-            self.local_full_path, self.b2_file_name, self.mod_time_millis
+        return 'b2_upload: ' + self.localPath
+
+
+class B2DownloadAction(AbstractAction):
+    def __init__(self, b2Name, b2Id, localPath, size):
+        self.b2Name = b2Name
+        self.b2Id = b2Id
+        self.localPath = localPath
+        self.size = size
+
+    def get_bytes(self):
+        return self.size
+
+    def do_action(self, conf, bucket, reporter):
+        # Make sure the directory exists
+        parent_dir = os.path.dirname(self.localPath)
+        if not os.path.isdir(parent_dir):
+            try:
+                os.makedirs(parent_dir)
+            except OSError:
+                pass
+        if not os.path.isdir(parent_dir):
+            raise Exception('could not create directory %s' % (parent_dir,))
+
+        # Download the file to a .tmp file
+        downloadPath = self.localPath + '.b2.sync.tmp'
+        destination = DownloadDestLocalFile(downloadPath)
+        bucket.download_file_by_name(self.b2Name, destination, SyncFileReporter(reporter))
+
+        # Move the file into place
+        try:
+            util.silentRemove(self.localPath)
+        except OSError:
+            pass
+        util.uncompressAndDecrypt(conf, downloadPath, self.localPath)
+
+    def do_report(self, bucket, reporter):
+        reporter.print_completion('download to ' + self.localPath)
+
+    def __str__(self):
+        return (
+            'b2_download(%s, %s, %s, %d)' %
+            (self.b2Name, self.b2Id, self.localPath, self.size)
         )
 
 
@@ -111,88 +154,39 @@ class B2HideAction(AbstractAction):
         return 'b2_hide(%s)' % (self.b2_file_name,)
 
 
-class B2DownloadAction(AbstractAction):
-    def __init__(
-        self, relative_name, b2_file_name, file_id, local_full_path, mod_time_millis, file_size
-    ):
-        self.relative_name = relative_name
-        self.b2_file_name = b2_file_name
-        self.file_id = file_id
-        self.local_full_path = local_full_path
-        self.mod_time_millis = mod_time_millis
-        self.file_size = file_size
-
-    def get_bytes(self):
-        return self.file_size
-
-    def do_action(self, bucket, reporter):
-        # Make sure the directory exists
-        parent_dir = os.path.dirname(self.local_full_path)
-        if not os.path.isdir(parent_dir):
-            try:
-                os.makedirs(parent_dir)
-            except OSError:
-                pass
-        if not os.path.isdir(parent_dir):
-            raise Exception('could not create directory %s' % (parent_dir,))
-
-        # Download the file to a .tmp file
-        download_path = self.local_full_path + '.b2.sync.tmp'
-        download_dest = DownloadDestLocalFile(download_path)
-        bucket.download_file_by_name(self.b2_file_name, download_dest, SyncFileReporter(reporter))
-
-        # Move the file into place
-        try:
-            os.unlink(self.local_full_path)
-        except OSError:
-            pass
-        os.rename(download_path, self.local_full_path)
-
-    def do_report(self, bucket, reporter):
-        reporter.print_completion('dnload ' + self.relative_name)
-
-    def __str__(self):
-        return (
-            'b2_download(%s, %s, %s, %d)' %
-            (self.b2_file_name, self.file_id, self.local_full_path, self.mod_time_millis)
-        )
-
-
 class B2DeleteAction(AbstractAction):
-    def __init__(self, relative_name, b2_file_name, file_id, note):
-        self.relative_name = relative_name
-        self.b2_file_name = b2_file_name
-        self.file_id = file_id
-        self.note = note
+    def __init__(self, displayName, b2Name, b2Id):
+        self.displayName = displayName
+        self.b2Name = b2Name
+        self.b2Id = b2Id
 
     def get_bytes(self):
         return 0
 
     def do_action(self, bucket, reporter):
-        bucket.api.delete_file_version(self.file_id, self.b2_file_name)
+        bucket.api.delete_file_version(self.b2Id, self.b2Name)
 
     def do_report(self, bucket, reporter):
         reporter.update_transfer(1, 0)
-        reporter.print_completion('delete ' + self.relative_name + ' ' + self.note)
+        reporter.print_completion('delete ' + self.displayName)
 
     def __str__(self):
-        return 'b2_delete(%s, %s, %s)' % (self.b2_file_name, self.file_id, self.note)
+        return 'b2_delete: ' + self.displayName
 
 
 class LocalDeleteAction(AbstractAction):
-    def __init__(self, relative_name, full_path):
-        self.relative_name = relative_name
-        self.full_path = full_path
+    def __init__(self, path):
+        self.path = path
 
     def get_bytes(self):
         return 0
 
     def do_action(self, bucket, reporter):
-        os.unlink(self.full_path)
+        util.silentRemove(self.path)
 
     def do_report(self, bucket, reporter):
         reporter.update_transfer(1, 0)
-        reporter.print_completion('delete ' + self.relative_name)
+        reporter.print_completion('delete ' + self.path)
 
     def __str__(self):
-        return 'local_delete(%s)' % (self.full_path)
+        return 'local_delete: ' + self.path

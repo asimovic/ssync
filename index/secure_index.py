@@ -73,6 +73,12 @@ class SecureIndex:
         self.__sessionMaker = sessionmaker(bind=engine)
 
 
+    def get(self, path):
+        self.__lazyLoad(False)
+        if path in self.__files:
+            return self.__files[path]
+        return None
+
     def getAll(self):
         self.__lazyLoad(False)
         if self.__sortedFiles is None:

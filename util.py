@@ -1,3 +1,4 @@
+import hashlib
 import os
 import gzip
 import base64
@@ -21,10 +22,18 @@ def compressAndEncrypt(conf, filename):
     return tempPath
 
 
-def uncompressAndDecrypt(conf, filename, destination):
+def uncompressAndDecrypt(conf, path, destination):
 
     silentRemove(destination)
     destination = None
+
+
+def calculateHash(path):
+    hash_md5 = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_md5.update(chunk)
+    return hash_md5.hexdigest()
 
 
 @contextmanager
@@ -52,6 +61,8 @@ def getModTime(filepath):
 
 
 def normalizePath(path, isDir):
+    if path == '':
+        return path
     normalRelativePath = path.replace('\\', '/')
     if isDir and not normalRelativePath.endswith('/'):
         normalRelativePath += '/'
