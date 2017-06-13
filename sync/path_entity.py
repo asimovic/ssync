@@ -34,10 +34,6 @@ class PathEntity(object):
                self.path.lower() == other.path.lower()
 
     def __le__(self, other):
-        if self.isDir and not other.isDir:
-            return True
-        if not self.isDir and other.isDir:
-            return False
         return self.path.lower() < other.path.lower()
 
     def __repr__(self):
@@ -48,19 +44,19 @@ class FileVersion(object):
     """
     Holds information about one version of a file:
 
-       id - The B2 file id, or the local full path name
+       id - The B2 file id, or the local full path name, or compound id for index
        mod_time - modification time, in milliseconds, to avoid rounding issues
                   with millisecond times from B2
        action - "hide" or "upload" (never "start")
     """
 
-    def __init__(self, id_, size, mod_time, action):
+    def __init__(self, id_, size, mod_time, md5):
         self.id_ = id_
         self.size = size
         self.mod_time = mod_time
-        self.action = action
+        self.md5 = md5
 
     def __repr__(self):
         return 'FileVersion(%s, %s, %s, %s)' % (
-            repr(self.id_), repr(self.mod_time), repr(self.action)
+            repr(self.id_), repr(self.mod_time)
         )

@@ -25,7 +25,7 @@ parser = createArgs()
 args = parser.parse_args()
 
 fl = []
-f = LocalFolder('C:\\AMD2')
+f = LocalFolder('C:\\AMD')
 for f in f.all_files(None):
     v = f.latest_version()
     if f.isDir:
@@ -50,7 +50,7 @@ t2 = time.time() - t1
 print (t2)
 
 
-sf = SecureFolder('c:\\AMD\\Packages', si)
+sf = SecureFolder('Packages/', si)
 ff = list(sf.all_files(None))
 
 fp = folder_parser.parseSyncDir('b2://hello/folder/', None)

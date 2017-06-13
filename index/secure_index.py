@@ -30,26 +30,34 @@ class IndexEntry(Base):
     b2Id = Column(String)
     b2Name = Column(String)
 
-    def __init__(self, path, isDir, size, modTime, md5, b2Id, b2Name):
+    def __init__(self, path, isDir, size, modTime, md5, remoteId, remoteName):
         self.path = path
         self.isDir = isDir
         self.size = size
         self.modTime = modTime
         self.md5 = md5
-        self.b2Id = b2Id
-        self.b2Name = b2Name
+        self.remoteId = remoteId
+        self.remoteName = remoteName
 
     def __eq__(self, other):
         return self.isDir == other.isDir and \
                self.path.lower() == other.path.lower()
 
-    def __le__(self, other):
-        d1 = self.path.count('/')
-        d2 = other.path.count('/')
+    def __lt__(self, other):
+        if isinstance(other, str):
+            path2 = other
+        else:
+            path2 = other.path
 
-        if d1 > d2:
-            return not self.path.startswith(other.path)
-        return self.path.lower() < other.path.lower()
+        # Depth first sorting, works but makes too many other things more complicated.
+        # Use simple string comparison on path
+        # d1 = self.path.count('/')
+        # d2 = path2.count('/')
+        #
+        # if d1 > d2:
+        #     return not self.path.startswith(path2)
+        # return self.path.lower() < path2.lower()
+        return self.path.lower() < path2.lower()
 
     def __repr__(self):
         return f'Index: {self.path}'

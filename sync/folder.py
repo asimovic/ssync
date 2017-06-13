@@ -10,8 +10,8 @@
 from abc import ABCMeta, abstractmethod
 import os
 import sys
-
 import six
+import util
 
 from .exception import EnvironmentEncodingError
 from .path_entity import PathEntity, FileVersion
@@ -170,7 +170,7 @@ class LocalFolder(AbstractFolder):
 
     def __makePathEntity(self, full_path, relative_path, isDir):
         # Normalize path separators to match b2
-        normalRelativePath = relative_path.replace('\\', '/')
+        normalRelativePath = util.normalizePath(relative_path, isDir)
 
         if isDir:
             version = None
@@ -182,7 +182,47 @@ class LocalFolder(AbstractFolder):
         return PathEntity(full_path, normalRelativePath, isDir, [version])
 
     def __repr__(self):
-        return 'LocalFolder(%s)' % self.root
+        return 'LocalFolder: ' + self.root
+
+
+class SecureFolder(AbstractFolder):
+    """
+    Folder interface using the secureIndex.
+
+    :param path: relative path to folder. Root should be the same path as the index root.
+    """
+
+    def __init__(self, path, secureIndex):
+        self.path = util.normalizePath(path, True).lower()
+        self.__secureIndex = secureIndex
+
+    def all_files(self, reporter):
+        for fileInfo in self.__secureIndex.getAll():
+            # Index is sorted by name so try and find the dir and start from there
+            if fileInfo < self.path:
+                continue
+            # We either passed all of the files in this folder or there were none
+            if not fileInfo.path.startswith(self.path.lower()):
+                break;
+
+            version = FileVersion((fileInfo.remoteId, fileInfo.remoteName), fileInfo.size,
+                fileInfo.modTime, fileInfo.md5)
+            pathEntity = PathEntity(fileInfo.path, fileInfo.path,
+                fileInfo.isDir, [version])
+
+            yield pathEntity
+
+    def folder_type(self):
+        return 'sec'
+
+    def make_full_path(self, filename):
+        if self.path == '':
+            return filename
+        else:
+            return self.path + '/' + filename
+
+    def __str__(self):
+        return 'SecFolder: ' + self.path
 
 
 class B2Folder(AbstractFolder):
@@ -223,63 +263,6 @@ class B2Folder(AbstractFolder):
             current_name = file_name
         if current_name is not None:
             yield PathEntity(current_name, False, current_versions)
-
-    def folder_type(self):
-        return 'b2'
-
-    def make_full_path(self, file_name):
-        if self.folder_name == '':
-            return file_name
-        else:
-            return self.folder_name + '/' + file_name
-
-    def __str__(self):
-        return 'B2Folder(%s, %s)' % (self.bucket_name, self.folder_name)
-
-
-class SecureFolder(AbstractFolder):
-    """
-    Folder interface to B2 using the secureIndex.
-    """
-
-    def __init__(self, path, secureIndex):
-        self.path = path
-        self.__secureIndex = secureIndex
-
-    def all_files(self, reporter):
-        current_name = None
-        current_versions = []
-
-        for fileInfo in self.__secureIndex.getAll():
-            # If the folder exists in the index it should have the dir
-            if fileInfo.path < self.path:
-                continue
-
-        for (file_version_info, folder_name) in self.bucket.ls(
-            self.folder_name, show_versions=True, recursive=True, fetch_count=1000
-        ):
-
-            assert file_version_info.file_name.startswith(self.prefix)
-            if file_version_info.action == 'start':
-                continue
-            file_name = file_version_info.file_name[len(self.prefix):]
-            if current_name != file_name and current_name is not None:
-                yield PathEntity(current_name, current_versions)
-                current_versions = []
-            file_info = file_version_info.file_info
-            if SRC_LAST_MODIFIED_MILLIS in file_info:
-                mod_time_millis = int(file_info[SRC_LAST_MODIFIED_MILLIS])
-            else:
-                mod_time_millis = file_version_info.upload_timestamp
-            assert file_version_info.size is not None
-            file_version = FileVersion(
-                file_version_info.id_, file_version_info.file_name, mod_time_millis,
-                file_version_info.action, file_version_info.size
-            )
-            current_versions.append(file_version)
-            current_name = file_name
-        if current_name is not None:
-            yield PathEntity(current_name, current_versions)
 
     def folder_type(self):
         return 'b2'

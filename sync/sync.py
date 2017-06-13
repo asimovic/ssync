@@ -54,7 +54,7 @@ def _filter_folder(folder, reporter, exclusions, inclusions):
         yield f
 
 
-def zip_folders(folder_a, folder_b, reporter, exclusions=tuple(), inclusions=tuple()):
+def iter_folders(folder_a, folder_b, reporter, exclusions=tuple(), inclusions=tuple()):
     """
     An iterator over all of the files in the union of two folders,
     matching file names.
@@ -130,8 +130,8 @@ def make_folder_sync_actions(source_folder, dest_folder, args, now_millis, repor
     ]:
         raise NotImplementedError("Sync support only local-to-b2 and b2-to-local")
 
-    for (source_file,
-         dest_file) in zip_folders(source_folder, dest_folder, reporter, exclusions, inclusions):
+    for (source_file, dest_file) in \
+            iter_folders(source_folder, dest_folder, reporter, exclusions, inclusions):
         if source_file is None:
             logging.debug('determined that %s is not present on source', dest_file)
         elif dest_file is None:
