@@ -26,48 +26,19 @@ def createArgs():
 parser = createArgs()
 args = parser.parse_args()
 
-fl = []
-f = LocalFolder('C:\\AMD')
-for f in f.all_files(None):
-    v = f.latest_version()
-    if f.isDir:
-        i = IndexEntry(f.relativePath, f.isDir, None, None,
-                       '12345678901234567890123456789012',
-                       '1234567890123456789012345678901212345678901234567890123456789012',
-                       '1234567890123456789012345678901212345678901234567890123456789012')
-    else:
-        i = IndexEntry(f.relativePath, f.isDir, v.size, v.mod_time,
-                       '12345678901234567890123456789012',
-                       '1234567890123456789012345678901212345678901234567890123456789012',
-                       '1234567890123456789012345678901212345678901234567890123456789012')
-    fl.append(i)
-
-
-si = SecureIndex('index.sqlite')
-si.clear()
-
-t1 = time.time()
-si.addAll(fl)
-t2 = time.time() - t1
-print (t2)
-
-sf = SecureFolder('Packages/', si)
-ff = list(sf.all_files(None))
-
-fp = folder_parser.parseSyncDir('b2://hello/folder/', None)
-
-
 conf = config.readConfig(CONFIG_PATH,
                          'SSync',
                          REQUIRED_CONFIG,
                          OPTIONAL_CONFIG)
-
 b2conf = config.readConfig(CONFIG_PATH,
                            'RemoteB2',
                            {'AccountId': str, 'ApplicationKey': str})
 
 b2Api = backblaze_b2.setupApi(b2conf)
 
+
+dest = folder_parser.parseSyncDir('b2://hello/folder/', None)
+src = folder_parser.parseSyncDir('b2://as-Test01/', None)
 
 
 s = SecureIndex(conf, b2Api, 'as-Test01')

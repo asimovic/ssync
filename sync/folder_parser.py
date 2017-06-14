@@ -26,22 +26,6 @@ def parseSyncDir(dirPath, conf, api):
         return LocalFolder(dirPath)
 
 
-def __parseB2Folder(bucket_and_path, api):
-    """
-    Turns 'my-bucket/foo' into B2Folder(my-bucket, foo)
-    """
-    if '//' in bucket_and_path:
-        raise CommandError("'//' not allowed in path names")
-    if '/' not in bucket_and_path:
-        bucket_name = bucket_and_path
-        folder_name = ''
-    else:
-        (bucket_name, folder_name) = bucket_and_path.split('/', 1)
-    if folder_name.endswith('/'):
-        folder_name = folder_name[:-1]
-    return B2Folder(bucket_name, folder_name, api)
-
-
 def __parseSecureB2Folder(path, conf, api):
     """
     Turns 'b2://my-bucket/foo' into a secure folder
@@ -60,4 +44,6 @@ def __parseSecureB2Folder(path, conf, api):
     sif = SecureIndexFactory(conf, api, bucketName)
     s = sif.getIndex()
 
-    return SecureFolder(folderName, s)
+    bucket = api.get_bucket_by_name(bucketName)
+
+    return SecureFolder(folderName, s, bucket)

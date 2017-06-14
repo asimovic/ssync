@@ -172,14 +172,10 @@ class LocalFolder(AbstractFolder):
         relativePath = fullPath[len(self.path):]
         # Normalize path separators to match b2
         normalRelativePath = util.normalizePath(relativePath, isDir)
+        mod_time = util.getModTime(fullPath)
+        size = 0 if isDir else os.path.getsize(fullPath)
 
-        if isDir:
-            version = None
-        else:
-            mod_time = int(round(os.path.getmtime(fullPath) * 1000))
-            size = os.path.getsize(fullPath)
-            version = FileVersion(fullPath, mod_time, "upload", size)
-
+        version = FileVersion(fullPath, mod_time, "upload", size)
         return PathEntity(fullPath, normalRelativePath, isDir, [version])
 
     def updateHashForSubFile(self, pathEntity):
@@ -199,12 +195,13 @@ class SecureFolder(AbstractFolder):
     :param secureIndex: secure index containing normalized path names
     """
 
-    def __init__(self, path, secureIndex):
+    def __init__(self, path, secureIndex, bucket):
         self.path = util.normalizePath(path, True)
-        self.__secureIndex = secureIndex
+        self.secureIndex = secureIndex
+        self.bucket = bucket
 
     def all_files(self, reporter):
-        for fileInfo in self.__secureIndex.getAll():
+        for fileInfo in self.secureIndex.getAll():
             if self.path != '':
                 # Index is sorted by name so try and find the dir and start from there
                 if fileInfo < self.path:

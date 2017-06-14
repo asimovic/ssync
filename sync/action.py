@@ -20,6 +20,7 @@ from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 
 import backblaze_b2
 import util
+from index.secure_index import IndexEntry
 from .report import SyncFileReporter
 
 logger = logging.getLogger(__name__)
@@ -37,12 +38,12 @@ class AbstractAction(object):
     UploadFileAction.
     """
 
-    def run(self, bucket, reporter, dry_run=False):
+    def run(self, remoteFolder, conf, reporter, dry_run=False):
         raise_if_shutting_down()
         try:
             if not dry_run:
-                self.do_action(bucket, reporter)
-            self.do_report(bucket, reporter)
+                self.do_action(remoteFolder, conf, reporter)
+            self.do_report(reporter)
         except Exception as e:
             logger.exception('an exception occurred in a sync action')
             reporter.error(str(self) + ": " + repr(e) + ' ' + str(e))
@@ -55,123 +56,107 @@ class AbstractAction(object):
         """
 
     @abstractmethod
-    def do_action(self, bucket, reporter):
+    def do_action(self, remoteFolder, conf, reporter):
         """
         Performs the action, returning only after the action is completed.
         """
 
     @abstractmethod
-    def do_report(self, bucket, reporter):
+    def do_report(self, reporter):
         """
         Report the action performed.
         """
 
 
 class B2UploadAction(AbstractAction):
-    def __init__(self, localPath, relativeName, size):
-        self.localPath = localPath
-        self.relativeName = relativeName
-        self.size = size
+    def __init__(self, sourceFile):
+        self.sourceFile = sourceFile
 
     def get_bytes(self):
-        return self.size
+        return self.sourceFile.latest_version().size
 
-    def do_action(self, bucket, reporter):
-        b2Name = util.generateSecureName(self.relativeName)
+    def do_action(self, remoteFolder, conf, reporter):
+        sf = self.sourceFile
+        if not sf.isDir:
+            b2Name = util.generateSecureName(sf.relativeName)
+            tempPath = util.compressAndEncrypt(conf, sf.nativePath)
 
-        bucket.upload(
-            UploadSourceLocalFile(self.localPath),
-            b2Name,
-            progress_listener=SyncFileReporter(reporter)
-        )
+            info = remoteFolder.bucket.upload(
+                UploadSourceLocalFile(tempPath),
+                b2Name,
+                progress_listener=SyncFileReporter(reporter)
+            )
+            b2Id = info.id_
+            b2Name = info.file_name
+        else:
+            b2Id = None
+            b2Name = None
 
-    def do_report(self, bucket, reporter):
-        reporter.print_completion('upload from ' + self.localPath)
+        ent = IndexEntry(sf.relativeName, sf.isDir, sf.latest_version().size,
+                         sf.latest_version().mod_time, sf.latest_version().hash,
+                         b2Id, b2Name)
+        remoteFolder.secureIndex.add(ent)
+
+    def do_report(self, reporter):
+        reporter.print_completion('upload ' + self.sourceFile.relativeName)
 
     def __str__(self):
-        return 'b2_upload: ' + self.localPath
+        return 'b2_upload: ' + self.sourceFile.relativeName
 
 
 class B2DownloadAction(AbstractAction):
-    def __init__(self, b2Name, b2Id, localPath, size):
-        self.b2Name = b2Name
-        self.b2Id = b2Id
+    def __init__(self, remoteFile, localPath):
+        self.remoteFile = remoteFile
         self.localPath = localPath
-        self.size = size
 
     def get_bytes(self):
-        return self.size
+        return self.remoteFile.size
 
-    def do_action(self, conf, bucket, reporter):
-        # Make sure the directory exists
-        parent_dir = os.path.dirname(self.localPath)
-        if not os.path.isdir(parent_dir):
-            try:
-                os.makedirs(parent_dir)
-            except OSError:
-                pass
-        if not os.path.isdir(parent_dir):
-            raise Exception('could not create directory %s' % (parent_dir,))
+    def do_action(self, remoteFolder, conf, reporter):
+        parentDir = os.path.dirname(self.localPath)
+        util.checkDirectory(parentDir)
 
-        # Download the file to a .tmp file
-        downloadPath = self.localPath + '.b2.sync.tmp'
-        destination = DownloadDestLocalFile(downloadPath)
-        bucket.download_file_by_name(self.b2Name, destination, SyncFileReporter(reporter))
-
-        # Move the file into place
-        try:
+        if self.remoteFile.isDir:
             util.silentRemove(self.localPath)
-        except OSError:
-            pass
-        util.uncompressAndDecrypt(conf, downloadPath, self.localPath)
+            util.checkDirectory(self.localPath)
+        else:
+            # Download the file to a .tmp file
+            downloadPath = self.localPath + '.b2.sync.tmp'
+            destination = DownloadDestLocalFile(downloadPath)
+            remoteFolder.bucket.download_file_by_name(
+                self.remoteFile.nativePath, destination, SyncFileReporter(reporter))
 
-    def do_report(self, bucket, reporter):
+            util.silentRemove(self.localPath)
+            util.uncompressAndDecrypt(conf, downloadPath, self.localPath)
+
+        modTime = self.remoteFile.mod_time / 1000.0
+        os.utime(self.localPath, (modTime, modTime))
+
+    def do_report(self, reporter):
         reporter.print_completion('download to ' + self.localPath)
 
     def __str__(self):
-        return (
-            'b2_download(%s, %s, %s, %d)' %
-            (self.b2Name, self.b2Id, self.localPath, self.size)
-        )
-
-
-class B2HideAction(AbstractAction):
-    def __init__(self, relative_name, b2_file_name):
-        self.relative_name = relative_name
-        self.b2_file_name = b2_file_name
-
-    def get_bytes(self):
-        return 0
-
-    def do_action(self, bucket, reporter):
-        bucket.hide_file(self.b2_file_name)
-
-    def do_report(self, bucket, reporter):
-        reporter.update_transfer(1, 0)
-        reporter.print_completion('hide   ' + self.relative_name)
-
-    def __str__(self):
-        return 'b2_hide(%s)' % (self.b2_file_name,)
+        return f'b2_download: f={self.remoteFile}, lp={self.localPath}'
 
 
 class B2DeleteAction(AbstractAction):
-    def __init__(self, displayName, b2Name, b2Id):
-        self.displayName = displayName
-        self.b2Name = b2Name
-        self.b2Id = b2Id
+    def __init__(self, remoteFile):
+        self.remoteFile = remoteFile
 
     def get_bytes(self):
         return 0
 
-    def do_action(self, bucket, reporter):
-        bucket.api.delete_file_version(self.b2Id, self.b2Name)
+    def do_action(self, remoteFolder, conf, reporter):
+        if not self.remoteFile.isDir:
+            remoteFolder.bucket.api.delete_file_version(self.remoteFile.remoteId, self.remoteFile.remoteName)
+        remoteFolder.secureIndex.remove(self.remoteFile.relativePath)
 
-    def do_report(self, bucket, reporter):
+    def do_report(self, reporter):
         reporter.update_transfer(1, 0)
-        reporter.print_completion('delete ' + self.displayName)
+        reporter.print_completion('delete ' + self.remoteFile.relativePath)
 
     def __str__(self):
-        return 'b2_delete: ' + self.displayName
+        return 'b2_delete: ' + self.remoteFile.relativePath
 
 
 class LocalDeleteAction(AbstractAction):
@@ -181,10 +166,10 @@ class LocalDeleteAction(AbstractAction):
     def get_bytes(self):
         return 0
 
-    def do_action(self, bucket, reporter):
+    def do_action(self, destinationDir, conf, reporter):
         util.silentRemove(self.path)
 
-    def do_report(self, bucket, reporter):
+    def do_report(self, reporter):
         reporter.update_transfer(1, 0)
         reporter.print_completion('delete ' + self.path)
 

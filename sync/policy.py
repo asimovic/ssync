@@ -9,8 +9,8 @@
 
 from abc import ABCMeta, abstractmethod
 
-from b2.exception import CommandError, DestFileNewer
-from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction, B2HideAction, B2UploadAction
+from b2.exception import CommandError
+from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction,  B2UploadAction
 
 ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
 
@@ -108,20 +108,6 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
         """ return an action representing transfer of file according to the selected policy """
 
 
-class DownPolicy(AbstractFileSyncPolicy):
-    # File is synced down (from the cloud to disk)
-    DESTINATION_PREFIX = 'local://'
-    SOURCE_PREFIX = 'b2://'
-
-    def __make_transfer_action(self):
-        return B2DownloadAction(
-            self.__sourceFile.nativePath,
-            self.__sourceFile.latest_version().id_,
-            self.__destinationDir.getFullPathForSubFile(self.__sourceFile.relativePath),
-            self.__sourceFile.latest_version().size
-        )
-
-
 class UpPolicy(AbstractFileSyncPolicy):
     # File is synced up (from disk the cloud)
     DESTINATION_PREFIX = 'b2://'
@@ -129,9 +115,19 @@ class UpPolicy(AbstractFileSyncPolicy):
 
     def __make_transfer_action(self):
         return B2UploadAction(
-            self.__sourceDir.nativePath,
-            self.__sourceFile.relativePath,
-            self.__sourceFile.latest_version().size
+            self.__sourceFile
+        )
+
+
+class DownPolicy(AbstractFileSyncPolicy):
+    # File is synced down (from the cloud to disk)
+    DESTINATION_PREFIX = 'local://'
+    SOURCE_PREFIX = 'b2://'
+
+    def __make_transfer_action(self):
+        return B2DownloadAction(
+            self.__sourceFile,
+            self.__destinationDir.getFullPathForSubFile(self.__sourceFile.relativePath)
         )
 
 
@@ -159,14 +155,9 @@ def makeB2DeleteActions(sourceFile, destinationFile, transferred):
     """
     Creates the actions to delete files stored on B2, which are not present locally.
     """
-    if destinationFile is None:
-        # B2 does not really store folders, so there is no need to hide
-        # them or delete them
-        raise StopIteration()
     for version_index, version in enumerate(destinationFile.versions):
         keep = (version_index == 0) and (sourceFile is not None) and not transferred
         if not keep:
             yield B2DeleteAction(
-                destinationFile + '.v' + version_index,
-                destinationFile.nativePath,
-                version.id_)
+                destinationFile
+            )

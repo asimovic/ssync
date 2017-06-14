@@ -26,16 +26,16 @@ class IndexEntry(Base):
     isDir = Column(Boolean)
     size = Column(Integer)
     modTime = Column(Integer)
-    md5 = Column(String)
+    hash = Column(String)
     b2Id = Column(String)
     b2Name = Column(String)
 
-    def __init__(self, path, isDir, size, modTime, md5, remoteId, remoteName):
+    def __init__(self, path, isDir, size, modTime, hash, remoteId, remoteName):
         self.path = path
         self.isDir = isDir
         self.size = size
         self.modTime = modTime
-        self.md5 = md5
+        self.hash = hash
         self.remoteId = remoteId
         self.remoteName = remoteName
 

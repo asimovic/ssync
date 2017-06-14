@@ -182,7 +182,7 @@ class BoundedQueueExecutor(object):
 
 
 def sync_folders(
-    source_folder, dest_folder, args, now_millis, stdout, no_progress, max_workers, dry_run=False
+    source_folder, dest_folder, args, now_millis, stdout, no_progress, max_workers, conf, dry_run=False
 ):
     """
     Syncs two folders.  Always ensures that every file in the
@@ -232,7 +232,7 @@ def sync_folders(
         total_bytes = 0
         for action in __make_folder_sync_actions(source_folder, dest_folder, args, now_millis, reporter):
             logging.debug('scheduling action %s on bucket %s')
-            future = sync_executor.submit(action.run, bucket, reporter, dry_run)
+            future = sync_executor.submit(action.run, remoteFolder, conf, reporter, dry_run)
             action_futures.append(future)
             total_files += 1
             total_bytes += action.get_bytes()

@@ -9,24 +9,19 @@ from contextlib import contextmanager
 
 SECURE_NAME_SALT = 'c3ViamVjdHM'
 
-
 def generateSecureName(filename):
     h = PasswordHasher(time_cost=1, memory_cost=512, parallelism=2)
     hs = h.hash(SECURE_NAME_SALT + filename)
     return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
-
 
 def compressAndEncrypt(conf, filename):
     tempPath = os.path.join(conf.temp, os.path.basename(filename))
     silentRemove(tempPath)
     return tempPath
 
-
 def uncompressAndDecrypt(conf, path, destination):
-
     silentRemove(destination)
     destination = None
-
 
 def calculateHash(path):
     hash_md5 = hashlib.md5()
@@ -34,7 +29,6 @@ def calculateHash(path):
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
-
 
 @contextmanager
 def session_scope(sessionMaker):
@@ -48,17 +42,23 @@ def session_scope(sessionMaker):
     finally:
         session.close()
 
-
 def silentRemove(filename):
     try:
         os.remove(filename)
     except FileNotFoundError:
         pass
 
-
 def getModTime(filepath):
     return int(round(os.path.getmtime(filepath) * 1000))
 
+def checkDirectory(path):
+    if not os.path.isdir(path):
+        try:
+            os.makedirs(path)
+        except OSError:
+            pass
+    if not os.path.isdir(path):
+        raise Exception('could not create directory %s' % (path,))
 
 def normalizePath(path, isDir):
     if path == '':
