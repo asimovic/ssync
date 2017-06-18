@@ -11,6 +11,8 @@ from abc import (ABCMeta, abstractmethod)
 
 import logging
 import os
+from time import sleep
+
 import six
 
 from b2.download_dest import DownloadDestLocalFile
@@ -77,8 +79,10 @@ class B2UploadAction(AbstractAction):
 
     def do_action(self, remoteFolder, conf, reporter):
         sf = self.sourceFile
-        if not sf.isDir:
-            b2Name = util.generateSecureName(sf.relativeName)
+
+        b2Name = util.generateSecureName(sf.relativePath)
+
+        if not sf.isDir and not conf.args.test:
             tempPath = util.compressAndEncrypt(conf, sf.nativePath)
 
             info = remoteFolder.bucket.upload(
@@ -86,22 +90,30 @@ class B2UploadAction(AbstractAction):
                 b2Name,
                 progress_listener=SyncFileReporter(reporter)
             )
+
+            # delete the temp file after the upload
+            util.silentRemove(tempPath)
+
             b2Id = info.id_
             b2Name = info.file_name
         else:
             b2Id = None
             b2Name = None
 
-        ent = IndexEntry(sf.relativeName, sf.isDir, sf.latest_version().size,
-                         sf.latest_version().mod_time, sf.latest_version().hash,
-                         b2Id, b2Name)
+        ent = IndexEntry(path=sf.relativePath,
+                         isDir=sf.isDir,
+                         size=sf.latest_version().size,
+                         modTime=sf.latest_version().mod_time,
+                         hash=sf.latest_version().hash,
+                         remoteId=b2Id,
+                         remoteName=b2Name)
         remoteFolder.secureIndex.add(ent)
 
     def do_report(self, reporter):
-        reporter.print_completion('upload ' + self.sourceFile.relativeName)
+        reporter.print_completion('upload ' + self.sourceFile.relativePath)
 
     def __str__(self):
-        return 'b2_upload: ' + self.sourceFile.relativeName
+        return 'b2_upload: ' + self.sourceFile.relativePath
 
 
 class B2DownloadAction(AbstractAction):
@@ -119,6 +131,9 @@ class B2DownloadAction(AbstractAction):
         if self.remoteFile.isDir:
             util.silentRemove(self.localPath)
             util.checkDirectory(self.localPath)
+        elif conf.args.test:
+            util.silentRemove(self.localPath)
+            open(self.localPath, 'a').close()
         else:
             # Download the file to a .tmp file
             downloadPath = self.localPath + '.b2.sync.tmp'
@@ -147,7 +162,7 @@ class B2DeleteAction(AbstractAction):
         return 0
 
     def do_action(self, remoteFolder, conf, reporter):
-        if not self.remoteFile.isDir:
+        if not self.remoteFile.isDir and not conf.args.test:
             remoteFolder.bucket.api.delete_file_version(self.remoteFile.remoteId, self.remoteFile.remoteName)
         remoteFolder.secureIndex.remove(self.remoteFile.relativePath)
 

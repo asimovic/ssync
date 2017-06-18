@@ -11,7 +11,6 @@ from b2.api import (B2Api, B2RawApi)
 from b2.b2http import (B2Http)
 from b2.cache import (AuthInfoCache)
 
-
 def authorizeAccount(api, accountId, applicationKey):
     try:
         api.authorize_account('production', accountId, applicationKey)
@@ -19,7 +18,6 @@ def authorizeAccount(api, accountId, applicationKey):
     except B2Error as e:
         print('ERROR: unable to authorize account: ' + str(e))
         return 1
-
 
 def setupApi(conf):
     info = SqliteAccountInfo('b2_account_info')
@@ -30,7 +28,6 @@ def setupApi(conf):
 
     return b2Api
 
-
 def getFileInfoByName(api, bucketName, fileName):
     bucket = api.get_bucket_by_name(bucketName)
     bucketFiles = bucket.list_file_names(fileName, 1)
@@ -39,13 +36,11 @@ def getFileInfoByName(api, bucketName, fileName):
     else:
         return bucketFiles['files'][0]
 
-
 def getModTimeFromFileInfo(fileInfo):
     if SRC_LAST_MODIFIED_MILLIS in fileInfo:
         return int(fileInfo[SRC_LAST_MODIFIED_MILLIS])
     else:
         return fileInfo['uploadTimestamp']
-
 
 def downloadSecureFile(conf, api: B2Api, fileId, destination):
     tempPath = os.path.join(conf.temp, os.path.basename(destination))
@@ -54,7 +49,6 @@ def downloadSecureFile(conf, api: B2Api, fileId, destination):
     api.download_file_by_id(fileId, tempPath)
     util.uncompressAndDecrypt(conf, tempPath, destination)
     return 0
-
 
 def uploadSecureFile(conf,
                      bucket: Bucket,

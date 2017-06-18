@@ -42,8 +42,11 @@ def __parseSecureB2Folder(path, conf, api):
         (bucketName, folderName) = path.split('/', 1)
 
     sif = SecureIndexFactory(conf, api, bucketName)
-    s = sif.getIndex()
+    s = sif.createIndex()
 
-    bucket = api.get_bucket_by_name(bucketName)
+    if conf.args.test:
+        bucket = None
+    else:
+        bucket = api.get_bucket_by_name(bucketName)
 
     return SecureFolder(folderName, s, bucket)

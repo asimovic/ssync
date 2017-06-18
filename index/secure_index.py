@@ -1,11 +1,18 @@
+import copy
 import os
+import threading
+
 import util
 
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, Boolean
+from sqlalchemy import Column, Integer, String, Boolean, bindparam
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from functools import total_ordering
+
+from RWLock import RWLock
+from ResettingTimer import ResettingTimer
+
 
 class IndexException(Exception):
     pass
@@ -27,8 +34,8 @@ class IndexEntry(Base):
     size = Column(Integer)
     modTime = Column(Integer)
     hash = Column(String)
-    b2Id = Column(String)
-    b2Name = Column(String)
+    remoteId = Column(String)
+    remoteName = Column(String)
 
     def __init__(self, path, isDir, size, modTime, hash, remoteId, remoteName):
         self.path = path
@@ -64,14 +71,21 @@ class IndexEntry(Base):
 
 class SecureIndex:
 
+    # can be decimals
+    __IDLE_DELAY_SEC = 2
+    __MAX_DELAY_SEC = 5
+
     def __init__(self, filename):
         self.filename = filename
         self.__files = None
         self.__sortedFiles = None
-        engine = create_engine('sqlite:///' + filename)
-        Base.metadata.create_all(engine)
-        self.__sessionMaker = sessionmaker(bind=engine)
-
+        self.__engine = create_engine('sqlite:///' + filename)
+        Base.metadata.create_all(self.__engine)
+        self.__sessionMaker = sessionmaker(bind=self.__engine)
+        self.lock = RWLock()
+        self.pendingActions = []
+        self.idleTmr = None
+        self.maxTmr = None
 
     def get(self, path):
         self.__lazyLoad(False)
@@ -88,34 +102,54 @@ class SecureIndex:
 
     def add(self, file: IndexEntry):
         self.__lazyLoad()
-        with util.session_scope(self.__sessionMaker) as session:
-            self.__addEntry(file, session)
-            session.expunge_all()
+        self.lock.reader_acquire()
+        try:
+            self.__addEntry(file)
+            self.__delayWrite()
+        finally:
+            self.lock.reader_release()
 
     def addAll(self, files):
         self.__lazyLoad()
-        with util.session_scope(self.__sessionMaker) as session:
+        self.lock.reader_acquire()
+        try:
             for f in files:
-                self.__addEntry(f, session)
-            session.expunge_all()
+                self.__addEntry(f)
+            self.__delayWrite()
+        finally:
+            self.lock.reader_release()
 
     def remove(self, file: IndexEntry):
         self.__lazyLoad()
-        with util.session_scope(self.__sessionMaker) as session:
-            self.__removeEntry(file, session)
+        self.lock.reader_acquire()
+        try:
+            self.__removeEntry(file)
+            self.__delayWrite()
+        finally:
+            self.lock.reader_release()
 
     def removeAll(self, files):
         self.__lazyLoad()
-        with util.session_scope(self.__sessionMaker) as session:
+        self.lock.reader_acquire()
+        try:
             for f in files:
-                self.__removeEntry(f, session)
+                self.__removeEntry(f)
+            self.__delayWrite()
+        finally:
+            self.lock.reader_release()
 
     def clear(self):
-        with util.session_scope(self.__sessionMaker) as session:
-            session.execute('DELETE FROM ' + INDEX_TABLE_NAME)
-        self.__files = None
+        self.lock.reader_acquire()
+        try:
+            self.pendingActions.append(('t', None))
+            self.__files.clear()
+            self.__delayWrite()
+        finally:
+            self.lock.reader_release()
         self.__lazyLoad()
 
+    def flush(self):
+        self.__writePending()
 
     def __lazyLoad(self, updating=True):
         # Files are being updates so clear the sorted cache
@@ -128,14 +162,53 @@ class SecureIndex:
                     self.__files[f.path] = f
                 session.expunge_all()
 
-    def __removeEntry(self, file, session):
-        if file.path in self.__files:
-            del self.__files[file.path]
-            session.remove(file)
+    def __delayWrite(self):
+        if self.idleTmr is None:
+            self.idleTmr = ResettingTimer(self.__IDLE_DELAY_SEC, self.__writePending)
+            self.idleTmr.start()
+        else:
+            self.idleTmr.reset()
+        if self.maxTmr is None:
+            self.maxTmr = ResettingTimer(self.__MAX_DELAY_SEC, self.__writePending)
+            self.maxTmr.start()
 
-    def __addEntry(self, file, session):
+    def __writePending(self):
+        self.lock.writer_acquire()
+        try:
+            with self.__engine.begin() as conn:
+                for type, data in self.pendingActions:
+                    if type == 'a':
+                        conn.execute(
+                            IndexEntry.__table__
+                                .insert(),
+                            [data.__dict__])
+                    elif type == 'd':
+                        conn.execute(
+                            IndexEntry.__table__
+                                .delete()
+                                .where(IndexEntry.path == bindparam('path')),
+                            [{'path':data}])
+                    elif type == 't':
+                        conn.execute('DELETE FROM ' + INDEX_TABLE_NAME)
+                self.pendingActions.clear()
+        finally:
+            self.idleTmr = None
+            self.maxTmr = None
+            self.lock.writer_release()
+
+    def __removeEntry(self, file):
+        if isinstance(file, IndexEntry):
+            path = file.path
+        else:
+            path = file
+
+        if path in self.__files:
+            del self.__files[path]
+            self.pendingActions.append(('d', copy.copy(path)))
+
+    def __addEntry(self, file):
         if file.path in self.__files:
             raise IndexException('File already exists in index: ' + file.path)
         self.__files[file.path] = file
-        session.add(file)
+        self.pendingActions.append(('a', copy.copy(file)))
 

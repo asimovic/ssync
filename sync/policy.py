@@ -10,6 +10,8 @@
 from abc import ABCMeta, abstractmethod
 
 from b2.exception import CommandError
+
+import util
 from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction,  B2UploadAction
 
 ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
@@ -19,30 +21,29 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
     SOURCE_PREFIX = NotImplemented
 
     def __init__(self, sourceDir, source_file, destinationDir, dest_file, now_millis, args):
-        self.__sourceDir = sourceDir
-        self.__sourceFile = source_file
-        self.__destinationDir = destinationDir
-        self.__destinationFile = dest_file
-        self.__delete = args.delete
-        self.__comparison = args.comparison
-        self.__nowMillis = now_millis
-        self.__transferred = False
+        self.sourceDir = sourceDir
+        self.sourceFile = source_file
+        self.destinationDir = destinationDir
+        self.destinationFile = dest_file
+        self.comparison = args.comparison
+        self.nowMillis = now_millis
+        self.transferred = False
 
     def __should_transfer(self):
         """
         Decides whether to transfer the file from the source to the destination.
         """
-        if self.__sourceFile is None:
+        if self.sourceFile is None:
             # No source file.  Nothing to transfer.
             return False
-        elif self.__destinationFile is None:
+        elif self.destinationFile is None:
             # Source file exists, but no destination file.  Always transfer.
             return True
         else:
             # Both exist.  Transfer only if the two are different.
-            return self.__files_are_different(self.__sourceDir, self.__sourceFile,
-                                              self.__destinationDir, self.__destinationFile,
-                                              self.__comparison)
+            return self.__files_are_different(self.sourceDir, self.sourceFile,
+                                              self.destinationDir, self.destinationFile,
+                                              self.comparison)
 
     @classmethod
     def __files_are_different(cls, sourceDir, sourceFile,
@@ -51,7 +52,7 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
         # Compare two files and determine if the the destination file should be replaced by the source file.
         if not comparison:
             comparison = '4'
-        if not comparison.isdigit():
+        if not util.is_int(comparison):
             raise CommandError('Invalid option for --compareVersions')
 
         compareLevel = int(comparison)
@@ -88,10 +89,10 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
 
     def getAllActions(self):
         if self.__should_transfer():
-            yield self.__make_transfer_action()
-            self.__transferred = True
+            yield self._make_transfer_action()
+            self.transferred = True
 
-        assert self.__destinationFile is not None or self.__sourceFile is not None
+        assert self.destinationFile is not None or self.sourceFile is not None
 
         for action in self._getHideOrDeleteActions():
             yield action
@@ -101,10 +102,10 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
         return []
 
     def _get_source_mod_time(self):
-        return self.__sourceFile.latest_version().mod_time
+        return self.sourceFile.latest_version().mod_time
 
     @abstractmethod
-    def __make_transfer_action(self):
+    def _make_transfer_action(self):
         """ return an action representing transfer of file according to the selected policy """
 
 
@@ -113,9 +114,9 @@ class UpPolicy(AbstractFileSyncPolicy):
     DESTINATION_PREFIX = 'b2://'
     SOURCE_PREFIX = 'local://'
 
-    def __make_transfer_action(self):
+    def _make_transfer_action(self):
         return B2UploadAction(
-            self.__sourceFile
+            self.sourceFile
         )
 
 
@@ -124,10 +125,10 @@ class DownPolicy(AbstractFileSyncPolicy):
     DESTINATION_PREFIX = 'local://'
     SOURCE_PREFIX = 'b2://'
 
-    def __make_transfer_action(self):
+    def _make_transfer_action(self):
         return B2DownloadAction(
-            self.__sourceFile,
-            self.__destinationDir.getFullPathForSubFile(self.__sourceFile.relativePath)
+            self.sourceFile,
+            self.destinationDir.getFullPathForSubFile(self.sourceFile.relativePath)
         )
 
 
@@ -136,7 +137,7 @@ class UpAndDeletePolicy(UpPolicy):
     def _getHideOrDeleteActions(self):
         for action in super(UpAndDeletePolicy, self)._getHideOrDeleteActions():
             yield action
-        for action in makeB2DeleteActions(self.__sourceFile, self.__destinationFile, self.__transferred):
+        for action in makeB2DeleteActions(self.sourceFile, self.destinationFile, self.transferred):
             yield action
 
 
@@ -145,19 +146,20 @@ class DownAndDeletePolicy(DownPolicy):
     def _getHideOrDeleteActions(self):
         for action in super(DownAndDeletePolicy, self)._getHideOrDeleteActions():
             yield action
-        if self.__destinationFile is not None and self.__sourceFile is None:
+        if self.destinationFile is not None and self.sourceFile is None:
             # Local files have either 0 or 1 versions.  If the file is there,
             # it must have exactly 1 version.
-            yield LocalDeleteAction(self.__destinationFile.nativePath)
+            yield LocalDeleteAction(self.destinationFile.nativePath)
 
 
 def makeB2DeleteActions(sourceFile, destinationFile, transferred):
     """
     Creates the actions to delete files stored on B2, which are not present locally.
     """
-    for version_index, version in enumerate(destinationFile.versions):
-        keep = (version_index == 0) and (sourceFile is not None) and not transferred
-        if not keep:
-            yield B2DeleteAction(
-                destinationFile
-            )
+    if destinationFile:
+        for version_index, version in enumerate(destinationFile.versions):
+            keep = (version_index == 0) and (sourceFile is not None) and not transferred
+            if not keep:
+                yield B2DeleteAction(
+                    destinationFile
+                )

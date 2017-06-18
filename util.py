@@ -3,6 +3,7 @@ import os
 import gzip
 import base64
 
+import shutil
 from argon2 import PasswordHasher
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
@@ -15,12 +16,14 @@ def generateSecureName(filename):
     return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
 
 def compressAndEncrypt(conf, filename):
-    tempPath = os.path.join(conf.temp, os.path.basename(filename))
+    tempPath = filename + '.ssync.tmp'
     silentRemove(tempPath)
+    shutil.copy(filename, tempPath)
     return tempPath
 
 def uncompressAndDecrypt(conf, path, destination):
     silentRemove(destination)
+    shutil.move(path, destination)
     destination = None
 
 def calculateHash(path):
@@ -47,6 +50,13 @@ def silentRemove(filename):
         os.remove(filename)
     except FileNotFoundError:
         pass
+
+def is_int(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
 
 def getModTime(filepath):
     return int(round(os.path.getmtime(filepath) * 1000))

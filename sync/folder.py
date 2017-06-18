@@ -116,7 +116,7 @@ class LocalFolder(AbstractFolder):
         # Collect the names
         # We know the dir_path is unicode, which will cause os.listdir() to
         # return unicode paths.
-        names = {}  # name to (full_path, relative path)
+        names = []
         paths = []
         try:
             paths = os.listdir(dir_path)
@@ -140,15 +140,16 @@ class LocalFolder(AbstractFolder):
                 if reporter is not None:
                     reporter.local_permission_error(full_path)
             else:
-                if os.path.isdir(full_path):
-                    name += os.sep
+                isDir = os.path.isdir(full_path)
+                if isDir:
                     full_path += os.sep
-                names[name] = full_path
+                # need to keep sorting consistent and different path separators can change sorting between folder types
+                sortPath = full_path.replace(os.sep, '/')
+                names.append((full_path, sortPath, isDir))
 
         # Yield all of the answers
-        for name in sorted(names):
-            full_path = names[name]
-            if name.endswith(os.sep):
+        for full_path, tmp, isDir in sorted(names, key=lambda x: x[1].lower()):
+            if isDir:
                 yield (full_path, True)
                 for rp in self.__walk_relative_paths(full_path, reporter):
                     yield rp
@@ -175,13 +176,17 @@ class LocalFolder(AbstractFolder):
         mod_time = util.getModTime(fullPath)
         size = 0 if isDir else os.path.getsize(fullPath)
 
-        version = FileVersion(fullPath, mod_time, "upload", size)
+        # Hash is computed later
+        version = FileVersion(id_=fullPath,
+                              size=size,
+                              mod_time=mod_time,
+                              hash=None)
         return PathEntity(fullPath, normalRelativePath, isDir, [version])
 
     def updateHashForSubFile(self, pathEntity):
-        if not pathEntity.hash and not pathEntity.isDir:
-            pathEntity.hash = util.calculateHash(pathEntity.nativePath)
-        return pathEntity.hash
+        if not pathEntity.latest_version().hash and not pathEntity.isDir:
+            pathEntity.latest_version().hash = util.calculateHash(pathEntity.nativePath)
+        return pathEntity.latest_version().hash
 
     def __repr__(self):
         return 'LocalFolder: ' + self.path
@@ -210,8 +215,10 @@ class SecureFolder(AbstractFolder):
                 if not fileInfo.path.startswith(self.path.lower()):
                     break;
 
-            version = FileVersion(fileInfo.remoteId, fileInfo.size,
-                fileInfo.modTime, fileInfo.md5)
+            version = FileVersion(id_=fileInfo.remoteId,
+                                  size=fileInfo.size,
+                                  mod_time=fileInfo.modTime,
+                                  hash=fileInfo.hash)
             pathEntity = PathEntity(fileInfo.remoteName, fileInfo.path, fileInfo.isDir, [version])
 
             yield pathEntity
@@ -227,11 +234,11 @@ class SecureFolder(AbstractFolder):
 
     def updateHashForSubFile(self, pathEntity):
         # Try to get hash from the index, but it should always have one already
-        if not pathEntity.hash:
-            indexPE = self.__secureIndex.get(pathEntity.relativePath)
+        if not pathEntity.latest_version().hash:
+            indexPE = self.secureIndex.get(pathEntity.relativePath)
             if indexPE is not None:
-                pathEntity.hash = indexPE.hash
-        return pathEntity.hash
+                pathEntity.latest_version().hash = indexPE.hash
+        return pathEntity.latest_version().hash
 
     def __str__(self):
         return 'SecFolder: ' + self.path

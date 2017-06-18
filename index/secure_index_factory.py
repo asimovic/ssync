@@ -18,28 +18,35 @@ class SecureIndexFactory:
 
     # Find, create or download a local index
     def createIndex(self):
-        #try and find local file
+        # try and find local file
         if os.path.isdir(self.conf.IndexPath):
             raise ConfigException('IndexPath cannot be a directory')
 
+        if not self.conf.args.test:
+            self.__getLatestIndex()
+
+        return SecureIndex(self.conf.IndexPath)
+
+    def __getLatestIndex(self):
         localModTime = None
         if os.path.exists(self.conf.IndexPath):
             localModTime = util.getModTime(self.conf.IndexPath)
 
         indexName = util.generateSecureName(self.__getName())
 
-        #get file info from b2
+        # get file info from b2
         if self.conf.IndexFileId:
             fileInfo = self.api.get_file_info(self.conf.IndexFileId)
-            fileId = self.conf.IndexFileId
+            fileId = self.conf.IndexFileId  # TODO: fake implementation
         else:
             fileInfo = backblaze_b2.getFileInfoByName(self.api, self.bucket_name, indexName)
+            fileId = fileInfo.id_  # TODO: fake implementation
+            self.conf.IndexFileId = fileId
 
         # Download if the local index doesnt exist of if its older
-        if fileInfo and (not localModTime or localModTime < backblaze_b2.getModTimeFromFileInfo(fileInfo)):
+        if fileInfo and (not localModTime or localModTime < backblaze_b2.getModTimeFromFileInfo(
+                fileInfo)):  # TODO: fake implementation
             backblaze_b2.downloadSecureFile(self.api, fileId, self.conf.IndexPath)
-
-        return SecureIndex(self.conf.IndexPath)
 
     # Upload local index to b2
     def storeIndex(self):

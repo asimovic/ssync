@@ -11,6 +11,8 @@ from __future__ import division
 
 import logging
 import re
+import time
+
 import six
 import threading
 
@@ -40,14 +42,17 @@ def __filter_folder(folder, reporter, exclusions, inclusions):
     """
     logging.debug('_filter_folder() exclusions for %s are %s', folder, exclusions)
     logging.debug('_filter_folder() inclusions for %s are %s', folder, inclusions)
+    useIgnore = len(exclusions) > 0
+
     for f in folder.all_files(reporter):
-        if any(pattern.match(f.name) for pattern in inclusions):
-            logging.debug('_filter_folder() included %s from %s', f, folder)
-            yield f
-            continue
-        if any(pattern.match(f.name) for pattern in exclusions):
-            logging.debug('_filter_folder() excluded %s from %s', f, folder)
-            continue
+        if useIgnore:
+            if any(pattern.match(f.name) for pattern in inclusions):
+                logging.debug('_filter_folder() included %s from %s', f, folder)
+                yield f
+                continue
+            if any(pattern.match(f.name) for pattern in exclusions):
+                logging.debug('_filter_folder() excluded %s from %s', f, folder)
+                continue
         yield f
 
 
@@ -69,20 +74,22 @@ def __iter_folders(folder_a, folder_b, reporter, exclusions=tuple(), inclusions=
     current_a = __nextOrNone(iter_a)
     current_b = __nextOrNone(iter_b)
     while current_a is not None or current_b is not None:
+        if (current_a != current_b):
+            i = True
         if current_a is None:
             yield (None, current_b)
             current_b = __nextOrNone(iter_b)
         elif current_b is None:
             yield (current_a, None)
             current_a = __nextOrNone(iter_a)
-        elif current_a.name < current_b.name:
+        elif current_a.relativePath < current_b.relativePath:
             yield (current_a, None)
             current_a = __nextOrNone(iter_a)
-        elif current_b.name < current_a.name:
+        elif current_b.relativePath < current_a.relativePath:
             yield (None, current_b)
             current_b = __nextOrNone(iter_b)
         else:
-            assert current_a.name == current_b.name
+            assert current_a.relativePath == current_b.relativePath
             yield (current_a, current_b)
             current_a = __nextOrNone(iter_a)
             current_b = __nextOrNone(iter_b)
@@ -105,15 +112,11 @@ def __make_folder_sync_actions(sourceDir, destinationDir, args, now_millis, repo
     Yields a sequence of actions that will sync the destination
     folder to the source folder.
     """
-    if args.skipNewer and args.replaceNewer:
-        raise CommandError('--skipNewer and --replaceNewer are incompatible')
+    exclusions = [re.compile(ex) for ex in args.exclude]
+    inclusions = [re.compile(inc) for inc in args.include]
 
-    exclusions = [re.compile(ex) for ex in args.excludeRegex]
-    inclusions = [re.compile(inc) for inc in args.includeRegex]
-
-    if (sourceDir.type(), destinationDir.type()) not in [
-        ('sec', 'local'), ('local', 'sec')
-    ]:
+    if (sourceDir.type(), destinationDir.type()) not in \
+            [('sec', 'local'), ('local', 'sec')]:
         raise NotImplementedError("Sync support only local-to-b2 and b2-to-local")
     syncType = SyncType.UPLOAD if sourceDir.type() == 'local' else SyncType.DOWNLOAD
 
@@ -182,7 +185,7 @@ class BoundedQueueExecutor(object):
 
 
 def sync_folders(
-    source_folder, dest_folder, args, now_millis, stdout, no_progress, max_workers, conf, dry_run=False
+    source_folder, dest_folder, now_millis, stdout, conf
 ):
     """
     Syncs two folders.  Always ensures that every file in the
@@ -190,11 +193,11 @@ def sync_folders(
     """
 
     # For downloads, make sure that the target directory is there.
-    if dest_folder.type() == 'local' and not dry_run:
+    if dest_folder.type() == 'local' and not conf.args.dryrun:
         dest_folder.ensure_present()
 
     # Make a reporter to report progress.
-    with SyncReport(stdout, no_progress) as reporter:
+    with SyncReport(stdout, conf.args.silent) as reporter:
 
         # Make an executor to count files and run all of the actions.  This is
         # not the same as the executor in the API object, which is used for
@@ -203,8 +206,8 @@ def sync_folders(
         #
         # We use an executor with a bounded queue to avoid using up lots of memory
         # when syncing lots of files.
-        unbounded_executor = futures.ThreadPoolExecutor(max_workers=max_workers)
-        queue_limit = max_workers + 1000
+        unbounded_executor = futures.ThreadPoolExecutor(max_workers=conf.args.workers)
+        queue_limit = conf.args.workers + 1000
         sync_executor = BoundedQueueExecutor(unbounded_executor, queue_limit=queue_limit)
 
         # First, start the thread that counts the local files.  That's the operation
@@ -227,18 +230,26 @@ def sync_folders(
         if remoteFolder is None:
             raise ValueError('neither folder is a b2 folder')
 
+
+        t1 = time.time()
         action_futures = []
         total_files = 0
         total_bytes = 0
-        for action in __make_folder_sync_actions(source_folder, dest_folder, args, now_millis, reporter):
+        for action in __make_folder_sync_actions(source_folder, dest_folder, conf.args, now_millis, reporter):
             logging.debug('scheduling action %s on bucket %s')
-            future = sync_executor.submit(action.run, remoteFolder, conf, reporter, dry_run)
-            action_futures.append(future)
+            action.run(remoteFolder, conf, reporter, conf.args.dryrun)
+            #future = sync_executor.submit(action.run, remoteFolder, conf, reporter, conf.args.dryrun)
+            #action_futures.append(future)
             total_files += 1
             total_bytes += action.get_bytes()
         reporter.end_compare(total_files, total_bytes)
 
         # Wait for everything to finish
         sync_executor.shutdown()
+        remoteFolder.secureIndex.flush()
+
+        t = time.time() - t1
+        print(t)
+
         if any(1 for f in action_futures if f.exception() is not None):
             raise CommandError('sync is incomplete')

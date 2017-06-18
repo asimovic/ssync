@@ -24,15 +24,15 @@ class SyncPolicyFactory(object):
 
     def getPolicyType(self, syncType, args):
         if syncType == SyncType.UPLOAD:
-            if args.delete:
-                return UpAndDeletePolicy
-            else:
+            if args.keep:
                 return UpPolicy
-        elif syncType == SyncType.DOWNLOAD:
-            if args.delete:
-                return DownAndDeletePolicy
             else:
+                return UpAndDeletePolicy
+        elif syncType == SyncType.DOWNLOAD:
+            if args.keep:
                 return DownPolicy
+            else:
+                return DownAndDeletePolicy
         assert False, f'Invalid sync type: {syncType}, args: {str(args)}'
 
 

@@ -30,6 +30,8 @@ class PathEntity(object):
         return self.versions[0]
 
     def __eq__(self, other):
+        if other is None:
+            return False
         return self.isDir == other.isDir and \
                self.relativePath.lower() == other.relativePath.lower()
 
