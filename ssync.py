@@ -7,6 +7,8 @@ from threading import Timer
 
 import yappi as yappi
 
+import security
+import util
 from ResettingTimer import ResettingTimer
 from sync import sync
 
@@ -19,15 +21,16 @@ from sync.folder import LocalFolder, SecureFolder
 from sync.sync import sync_folders
 
 CONFIG_PATH = 'ssync.conf'
-REQUIRED_CONFIG = {'TempDir': str, 'GnuPGHome': str, 'IndexPath': str }
+REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'IndexPath': str }
 OPTIONAL_CONFIG = {'IndexFileId': str}
 
 def createArgs():
     parser = argparse.ArgumentParser(description='Securely syncronize files between locations.',
                                      formatter_class=lambda prog: argparse.HelpFormatter(prog, width=100))
-    parser.add_argument('src', help='source path to sync files from')
-    parser.add_argument('dest', help='destination path to sync files to')
-    parser.add_argument('-k', '--keep',
+    parser.add_argument('source', help='source path to sync files from')
+    parser.add_argument('destination', help='destination path to sync files to')
+    parser.add_argument('passphrase', help='passphrase for decryption')
+    parser.add_argument('-k', '--keep', action='store_true',
                         help='keep files that the destination has if they do not exist on the source')
     parser.add_argument('--test', action='store_true',
                         help='run in test mode, operations are done against index only')
@@ -76,14 +79,16 @@ def processConfig():
 
 (conf, b2conf) = processConfig()
 
+security.compressAndEncrypt(conf, 'D:\Downloads\gs.mkv')
+
 if conf.args.test:
     b2Api = None
 else:
     b2Api = backblaze_b2.setupApi(b2conf)
     b2Api.set_thread_pool_size(conf.args.workers)
 
-source = folder_parser.parseSyncDir(conf.args.src, conf, b2Api)
-destination = folder_parser.parseSyncDir(conf.args.dest, conf, b2Api)
+source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
+destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
 
 sync_folders(
     source_folder=source,

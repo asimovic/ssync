@@ -1,30 +1,8 @@
 import hashlib
 import os
-import gzip
-import base64
-
-import shutil
-from argon2 import PasswordHasher
-from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
 
-SECURE_NAME_SALT = 'c3ViamVjdHM'
-
-def generateSecureName(filename):
-    h = PasswordHasher(time_cost=1, memory_cost=512, parallelism=2)
-    hs = h.hash(SECURE_NAME_SALT + filename)
-    return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
-
-def compressAndEncrypt(conf, filename):
-    tempPath = filename + '.ssync.tmp'
-    silentRemove(tempPath)
-    shutil.copy(filename, tempPath)
-    return tempPath
-
-def uncompressAndDecrypt(conf, path, destination):
-    silentRemove(destination)
-    shutil.move(path, destination)
-    destination = None
+APPLICATION_EXT = '.ssynctmp'
 
 def calculateHash(path):
     hash_md5 = hashlib.md5()
