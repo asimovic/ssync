@@ -7,22 +7,18 @@
 #
 ######################################################################
 
-from abc import (ABCMeta, abstractmethod)
-
 import logging
 import os
-from time import sleep
+import security
+from abc import (ABCMeta, abstractmethod)
 
 import six
-
 from b2.download_dest import DownloadDestLocalFile
 from b2.upload_source import UploadSourceLocalFile
 from b2.utils import raise_if_shutting_down
-from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 
-import backblaze_b2
-import util
 from index.secure_index import IndexEntry
+from utility import util
 from .report import SyncFileReporter
 
 logger = logging.getLogger(__name__)
@@ -80,22 +76,24 @@ class B2UploadAction(AbstractAction):
     def do_action(self, remoteFolder, conf, reporter):
         sf = self.sourceFile
 
-        b2Name = util.generateSecureName(sf.relativePath)
+        if not sf.isDir:
+            b2Name = security.generateSecureName(sf.relativePath)
+            getHash = sf.latest_version().hash is None
+            tempPath, hashDigest = security.compressAndEncrypt(conf, sf.nativePath, getHash)
+            if getHash:
+                sf.latest_version().hash = hashDigest
 
-        if not sf.isDir and not conf.args.test:
-            tempPath = util.compressAndEncrypt(conf, sf.nativePath)
-
-            info = remoteFolder.bucket.upload(
-                UploadSourceLocalFile(tempPath),
-                b2Name,
-                progress_listener=SyncFileReporter(reporter)
-            )
+            if not conf.args.test:
+                info = remoteFolder.bucket.upload(
+                    UploadSourceLocalFile(tempPath),
+                    b2Name,
+                    progress_listener=SyncFileReporter(reporter)
+                )
+                b2Id = info.id_
+                b2Name = info.file_name
 
             # delete the temp file after the upload
             util.silentRemove(tempPath)
-
-            b2Id = info.id_
-            b2Name = info.file_name
         else:
             b2Id = None
             b2Name = None
@@ -142,7 +140,7 @@ class B2DownloadAction(AbstractAction):
                 self.remoteFile.nativePath, destination, SyncFileReporter(reporter))
 
             util.silentRemove(self.localPath)
-            util.uncompressAndDecrypt(conf, downloadPath, self.localPath)
+            security.decompressAndDecrypt(conf, downloadPath, self.localPath)
 
         modTime = self.remoteFile.mod_time / 1000.0
         os.utime(self.localPath, (modTime, modTime))

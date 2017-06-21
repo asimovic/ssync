@@ -1,10 +1,12 @@
-import util
 import os
-import backblaze_b2
+
 from b2.api import B2Api
 
-from config import ConfigException
+import backblaze_b2
+import security
 from index.secure_index import SecureIndex
+from utility import util
+from utility.config import ConfigException
 
 
 class SecureIndexFactory:
@@ -32,7 +34,7 @@ class SecureIndexFactory:
         if os.path.exists(self.conf.IndexPath):
             localModTime = util.getModTime(self.conf.IndexPath)
 
-        indexName = util.generateSecureName(self.__getName())
+        indexName = security.generateSecureName(self.__getName())
 
         # get file info from b2
         if self.conf.IndexFileId:

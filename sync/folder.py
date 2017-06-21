@@ -7,15 +7,13 @@
 #
 ######################################################################
 
-from abc import ABCMeta, abstractmethod
 import os
 import sys
-import util
-from sync import path_entity
+from abc import ABCMeta, abstractmethod
 
+from utility import util
 from .exception import EnvironmentEncodingError
 from .path_entity import PathEntity, FileVersion
-from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 
 
 class AbstractFolder(metaclass=ABCMeta):
@@ -71,8 +69,7 @@ class LocalFolder(AbstractFolder):
     def __init__(self, path):
         """
         Initializes a new folder.
-
-        :param root: Path to the root of the local folder.  Must be unicode.
+        :param path: Path to the root of the local folder.  Must be unicode.
         """
         if not isinstance(path, str):
             raise ValueError('folder path should be unicode: %s' % repr(path))

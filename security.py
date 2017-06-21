@@ -1,12 +1,25 @@
-import gnupg_ext
-import util
 import base64
 import shutil
 import threading
 
+import time
 from argon2 import PasswordHasher
-from gzip_stream import GzipCompressStream
-from gzip_stream import GzipDecompressStream
+
+import gnupg_ext
+from utility import util
+from utility.gzip_stream import GzipCompressStream
+from utility.gzip_stream import GzipDecompressStream
+from utility.hash_stream import HashStream
+
+
+class Passthrough(object):
+    def __init__(self, obj):
+        self.passObj = obj
+    def __enter__(self):
+        return self.passObj
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self.passObj.__exit__(exc_type, exc_value, traceback)
+
 
 __SECURE_NAME_SALT = 'c3ViamVjdHM'
 __gpgLock = threading.Lock()
@@ -30,38 +43,35 @@ def generateSecureName(filename):
     hs = h.hash(__SECURE_NAME_SALT + filename)
     return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
 
-def compressAndEncrypt(conf, filename):
+def compressAndEncrypt(conf, filename, computeHash=False):
     global gpg
     __setupGpg(conf)
     tempPath = filename + util.APPLICATION_EXT
-    # util.silentRemove(tempPath)
-    #
-    # with open(filename, 'rb') as source:
-    #     with open(tempPath, 'wb') as destination:
-    #         with GzipCompressStream(source) as gzip:
-    #             shutil.copyfileobj(gzip, destination)
-    #
-    with open(tempPath, 'rb') as fin:
-        with open(tempPath+'2', 'wb') as fout:
-            with gpg.openEncryptStream(fin, recipients=['none@none.com']) as ein:
-                shutil.copyfileobj(ein, fout)
+    util.silentRemove(tempPath)
 
-    with open(tempPath+'2', 'rb') as fin:
-        with open(tempPath+'3', 'wb') as fout:
-            with gpg.openDecryptStream(fin, conf.args.passphrase) as din:
-                shutil.copyfileobj(din, fout)
+    with open(filename, 'rb') as fin:
+     with open(tempPath, 'wb') as fout:
+      with __getHashStream(fin, computeHash) as hin:
+       with GzipCompressStream(hin) as gzip:
+        with gpg.openEncryptStreamSymmetric(gzip, conf.args.passphrase, compress=False) as ein:
+         shutil.copyfileobj(ein, fout)
+       hashDigest = hin.hexdigest() if computeHash else None
 
-    # with open(tempPath+'2', 'rb') as f:
-    #     status = gpg.decrypt_file(
-    #         f, passphrase=conf.args.passphrase)
-
-    return tempPath
+    return tempPath, hashDigest
 
 def decompressAndDecrypt(conf, path, destination):
     __setupGpg(conf)
     util.silentRemove(destination)
-    with open(path, 'rb') as source:
-        with open(destination, 'wb') as destination:
-            with GzipDecompressStream(source) as gzip:
-                shutil.copyfileobj(gzip, destination)
-    destination = None
+
+    with open(path, 'rb') as fin:
+     with open(destination, 'wb') as fout:
+      with gpg.openDecryptStream(fin, conf.args.passphrase) as din:
+       with GzipDecompressStream(din) as gzip:
+        with __getHashStream(gzip, False) as hin:
+         shutil.copyfileobj(hin, fout)
+
+def __getHashStream(instream, computeHash):
+    if computeHash:
+        return HashStream(instream)
+    else:
+        return Passthrough(instream)

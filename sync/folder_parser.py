@@ -7,9 +7,10 @@
 #
 ######################################################################
 
-import util
 from b2.exception import CommandError
+
 from index.secure_index_factory import SecureIndexFactory
+from utility import util
 from .folder import LocalFolder, SecureFolder
 
 

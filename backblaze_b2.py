@@ -1,15 +1,17 @@
 import os
 
-from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
-
-import util
-from b2.exception import B2Error
-from b2.api import Bucket
-from b2.upload_source import UploadSourceLocalFile
 from b2.account_info.sqlite_account_info import (SqliteAccountInfo)
 from b2.api import (B2Api, B2RawApi)
+from b2.api import Bucket
 from b2.b2http import (B2Http)
 from b2.cache import (AuthInfoCache)
+from b2.exception import B2Error
+from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
+from b2.upload_source import UploadSourceLocalFile
+
+import security
+from utility import util
+
 
 def authorizeAccount(api, accountId, applicationKey):
     try:
@@ -47,7 +49,7 @@ def downloadSecureFile(conf, api: B2Api, fileId, destination):
     util.silentRemove(tempPath)
 
     api.download_file_by_id(fileId, tempPath)
-    util.uncompressAndDecrypt(conf, tempPath, destination)
+    security.decompressAndDecrypt(conf, tempPath, destination)
     return 0
 
 def uploadSecureFile(conf,
@@ -58,12 +60,12 @@ def uploadSecureFile(conf,
 
     tempPath = os.path.join(conf.temp, os.path.basename(filepath))
     util.silentRemove(tempPath)
-    util.compressAndEncrypt(tempPath)
+    security.compressAndEncrypt(tempPath, False)
 
     if customName:
-        secureName = util.generateSecureName(customName)
+        secureName = security.generateSecureName(customName)
     else:
-        secureName = util.generateSecureName(filepath)
+        secureName = security.generateSecureName(filepath)
 
     if saveModTime:
         fileInfo = {SRC_LAST_MODIFIED_MILLIS: str(getModTimeFromFileInfo(filepath))}

@@ -11,8 +11,8 @@ from abc import ABCMeta, abstractmethod
 
 from b2.exception import CommandError
 
-import util
-from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction,  B2UploadAction
+from utility import util
+from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction, B2UploadAction
 
 ONE_DAY_IN_MS = 24 * 60 * 60 * 1000
 

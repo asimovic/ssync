@@ -2,13 +2,16 @@ import codecs
 import threading
 
 import gnupg
-import sys
 from gnupg import GPG
-
-CHUNK = 1024
+from utility.byte_buffer import Buffer
 
 
 class GpgExtError(Exception):
+    pass
+
+
+class CryptExt(gnupg.Crypt):
+    stderr = []
     pass
 
 
@@ -18,10 +21,19 @@ class GpgExt(GPG):
     """
     pass
 
-    __streamOpen = False
-    __startedRead = False
-    __writer = None
-    __statusReader = None
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__streamOpen = False
+        self.__startedRead = False
+        self.__writer = None
+        self.__statusReader = None
+        self.__instream = None
+        self.__buf = None
+        self.__process = None
+        self.__stdin = None
+        self.result = None
+
+    CHUNK = 1024 * 8
 
     def encrypt_file(self, file, recipients, sign=None,
             always_trust=False, passphrase=None,
@@ -48,43 +60,49 @@ class GpgExt(GPG):
         args.append("--always-trust")
 
         self.__createStreamsAndProcess(instream, args, passphrase)
-        if passphrase:
-            gnupg._write_passphrase(self.__stdin, passphrase, self.encoding)
         return self
 
-    def openEncryptStream(self, instream, recipients, sign=None, passphrase=None, symmetric=False):
+    def openEncryptStreamSymmetric(self, instream, passphrase, algorithm=None, sign=None, compress=True):
+        args = ['--symmetric']
+        if algorithm:
+            # only works with symetric
+            args.extend(['--cipher-algo', gnupg.no_quote(algorithm)])
+            # else use the default, currently CAST5
+        return self.__openEncryptStream(instream, args,
+                                        sign=sign, passphrase=passphrase, compress=compress)
+
+    def openEncryptStream(self, instream, recipients, sign=None, passphrase=None, compress=True):
+        args = ['--encrypt']
+        if not recipients:
+            raise ValueError('No recipients specified')
+        if not gnupg._is_sequence(recipients):
+            recipients = (recipients,)
+        for recipient in recipients:
+            args.extend(['--recipient', gnupg.no_quote(recipient)])
+        return self.__openEncryptStream(instream, args,
+                                        sign=sign, passphrase=passphrase, compress=compress)
+
+    def __openEncryptStream(self, instream, args, sign, passphrase, compress):
         if self.__streamOpen:
             return self
-
-        args = ['--encrypt']
-        if symmetric:
-            # can't be False or None - could be True or a cipher algo value
-            # such as AES256
-            args = ['--symmetric']
-            if symmetric is not True:
-                args.extend(['--cipher-algo', gnupg.no_quote(symmetric)])
-                # else use the default, currently CAST5
-        else:
-            if not recipients:
-                raise ValueError('No recipients specified with asymmetric '
-                                 'encryption')
-            if not gnupg._is_sequence(recipients):
-                recipients = (recipients,)
-            for recipient in recipients:
-                args.extend(['--recipient', gnupg.no_quote(recipient)])
         if sign is True:  # pragma: no cover
             args.append('--sign')
         elif sign:  # pragma: no cover
             args.extend(['--sign', '--default-key', gnupg.no_quote(sign)])
         args.append('--always-trust')
+        if not compress:
+            args.extend(['--compress-algo', 'none'])
         self.__createStreamsAndProcess(instream, args, passphrase)
         return self
 
     def __createStreamsAndProcess(self, instream, args, passphrase):
-        self.result = self.result_map['crypt'](self)
+        self.result = CryptExt(self) #self.result_map['crypt'](self)
         self.__instream = instream
+        self.__buf = Buffer()
         self.__process = self._open_subprocess(args, passphrase is not None)
         self.__stdin = self.__process.stdin
+        if passphrase:
+            gnupg._write_passphrase(self.__stdin, passphrase, self.encoding)
         self.__streamOpen = True
         self.__startedRead = False
 
@@ -92,20 +110,18 @@ class GpgExt(GPG):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.__stdin is not None:
-            try:
-                self.__stdin.close()
-            except IOError:
-                pass
+        self.__stdin.close()
         self.__process.stdout.close()
         self.__process.stderr.close()
         self.__process.kill()
         self.__process = None
 
-        self.__writer.join()
-        self.__statusReader.join()
-        self.__writer = None
-        self.__statusReader = None
+        if self.__startedRead:
+            self.__writer.join()
+            self.__statusReader.join()
+            self.__writer = None
+            self.__statusReader = None
+        self.__stdin = None
         self.__streamOpen = False
         self.__startedRead = False
 
@@ -126,16 +142,12 @@ class GpgExt(GPG):
         # Read the contents of the file from GPG's stdout
         # shouldn't block becuase the writer will keep writing until the instream is processed
         # when instream is closed this will closed as well
-        read = 0
-        chunks = []
-        while size < 0 or read < size:
-            data = stream.read(1024)
-            l = len(data)
-            if l == 0:
+        while size < 0 or len(self.__buf) < size:
+            data = stream.read(self.CHUNK)
+            if len(data) == 0:
                 break
-            chunks.append(data)
-            read += l
-        return type(data)().join(chunks)
+            self.__buf.write(data)
+        return self.__buf.read(size)
 
     def __startReadStderr(self):
         stderr = codecs.getreader(self.encoding)(self.__process.stderr)
@@ -143,3 +155,33 @@ class GpgExt(GPG):
         rr.setDaemon(True)
         rr.start()
         return rr
+
+    def _read_response(self, stream, result):
+        # same as base class but with error handling
+        lines = []
+        while True:
+            try:
+                line = stream.readline()
+                if len(line) == 0:
+                    break
+                lines.append(line)
+                line = line.rstrip()
+                if self.verbose:  # pragma: no cover
+                    print(line)
+                if line[0:9] == '[GNUPG:] ':
+                    # Chop off the prefix
+                    line = line[9:]
+                    L = line.split(None, 1)
+                    keyword = L[0]
+                    if len(L) > 1:
+                        value = L[1]
+                    else:
+                        value = ""
+                    result.handle_status(keyword, value)
+            except Exception as e:
+                line = 'Exception: ' + str(e)
+                lines.append(line)
+                break
+        # python is so hacky
+        if hasattr(result, 'stderr'):
+            result.stderr.append(''.join(lines))

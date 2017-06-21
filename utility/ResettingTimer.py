@@ -1,5 +1,4 @@
-from threading import Thread, Event, Timer
-import time
+from threading import Thread, Event
 
 class ResettingTimer(Thread):
     """Call a function after a specified number of seconds:

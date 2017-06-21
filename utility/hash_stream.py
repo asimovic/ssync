@@ -1,7 +1,7 @@
 import hashlib
 
 class HashStream:
-    def __init__(self, instream, hashObj=hashlib.md5):
+    def __init__(self, instream, hashObj=hashlib.md5()):
         """
         Create a new hashing object that can process streams.
         :param instream: file-like stream object that will be hashed
@@ -26,5 +26,6 @@ class HashStream:
     def read(self, size=-1):
         # pass through read size, we're trusting the other streams can throttle their data reading
         data = self.__instream.read(size)
-        self.__hashObj.update(data)
+        if data:
+            self.__hashObj.update(data)
         return data

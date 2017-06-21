@@ -1,17 +1,14 @@
 import copy
-import os
-import threading
-
-import util
-
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, Boolean, bindparam
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from functools import total_ordering
 
-from RWLock import RWLock
-from ResettingTimer import ResettingTimer
+from sqlalchemy import Column, Integer, String, Boolean, bindparam
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+from utility import util
+from utility.RWLock import RWLock
+from utility.ResettingTimer import ResettingTimer
 
 
 class IndexException(Exception):

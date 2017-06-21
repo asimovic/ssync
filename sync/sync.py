@@ -19,11 +19,7 @@ import threading
 from b2.exception import CommandError
 from .policy_manager import POLICY_MANAGER, SyncType
 from .report import SyncReport
-
-try:
-    import concurrent.futures as futures
-except ImportError:
-    import futures
+import concurrent.futures as futures
 
 logger = logging.getLogger(__name__)
 

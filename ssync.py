@@ -1,24 +1,12 @@
 import argparse
-import json
+import sys
 import time
 
-import sys
-from threading import Timer
-
-import yappi as yappi
-
-import security
-import util
-from ResettingTimer import ResettingTimer
-from sync import sync
-
 import backblaze_b2
-import config
-from index.secure_index import IndexEntry
-from index.secure_index_factory import SecureIndex, SecureIndexFactory
+import security
 from sync import folder_parser
-from sync.folder import LocalFolder, SecureFolder
 from sync.sync import sync_folders
+from utility import config
 
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'IndexPath': str }
@@ -80,20 +68,20 @@ def processConfig():
 (conf, b2conf) = processConfig()
 
 security.compressAndEncrypt(conf, 'D:\Downloads\gs.mkv')
-
-if conf.args.test:
-    b2Api = None
-else:
-    b2Api = backblaze_b2.setupApi(b2conf)
-    b2Api.set_thread_pool_size(conf.args.workers)
-
-source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
-destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
-
-sync_folders(
-    source_folder=source,
-    dest_folder=destination,
-    now_millis=int(round(time.time() * 1000)),
-    stdout=sys.stdout,
-    conf=conf
-)
+#
+# if conf.args.test:
+#     b2Api = None
+# else:
+#     b2Api = backblaze_b2.setupApi(b2conf)
+#     b2Api.set_thread_pool_size(conf.args.workers)
+#
+# source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
+# destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
+#
+# sync_folders(
+#     source_folder=source,
+#     dest_folder=destination,
+#     now_millis=int(round(time.time() * 1000)),
+#     stdout=sys.stdout,
+#     conf=conf
+# )
