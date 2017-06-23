@@ -27,7 +27,6 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
         self.destinationFile = dest_file
         self.comparison = args.comparison
         self.nowMillis = now_millis
-        self.transferred = False
 
     def __should_transfer(self):
         """
@@ -90,14 +89,13 @@ class AbstractFileSyncPolicy(metaclass=ABCMeta):
     def getAllActions(self):
         if self.__should_transfer():
             yield self._make_transfer_action()
-            self.transferred = True
 
         assert self.destinationFile is not None or self.sourceFile is not None
 
-        for action in self._getHideOrDeleteActions():
+        for action in self._getDeleteActions():
             yield action
 
-    def _getHideOrDeleteActions(self):
+    def _getDeleteActions(self):
         """ subclass policy can override this to hide or delete files """
         return []
 
@@ -114,10 +112,15 @@ class UpPolicy(AbstractFileSyncPolicy):
     DESTINATION_PREFIX = 'b2://'
     SOURCE_PREFIX = 'local://'
 
+    def shouldDeleteOld(self):
+        return False
+
     def _make_transfer_action(self):
-        return B2UploadAction(
-            self.sourceFile
-        )
+        upload = B2UploadAction(self.sourceFile)
+        if self.shouldDeleteOld() and self.destinationFile is not None:
+            delete = B2DeleteAction(self.destinationFile)
+            return delete, upload
+        return upload
 
 
 class DownPolicy(AbstractFileSyncPolicy):
@@ -128,38 +131,23 @@ class DownPolicy(AbstractFileSyncPolicy):
     def _make_transfer_action(self):
         return B2DownloadAction(
             self.sourceFile,
-            self.destinationDir.getFullPathForSubFile(self.sourceFile.relativePath)
+            self.destinationDir.getFullPathForSubFile(self.sourceFile)
         )
 
 
 class UpAndDeletePolicy(UpPolicy):
+    def shouldDeleteOld(self):
+        return True
+
     # File is synced up (from disk to the cloud) and the delete flag is SET
-    def _getHideOrDeleteActions(self):
-        for action in super(UpAndDeletePolicy, self)._getHideOrDeleteActions():
-            yield action
-        for action in makeB2DeleteActions(self.sourceFile, self.destinationFile, self.transferred):
-            yield action
+    def _getDeleteActions(self):
+        # if the destination exits then it only has 1 version since the secure index only supports 1
+        if self.destinationFile is not None and self.sourceFile is None:
+            yield B2DeleteAction(self.destinationFile)
 
 
 class DownAndDeletePolicy(DownPolicy):
     # File is synced down (from the cloud to disk) and the delete flag is SET
-    def _getHideOrDeleteActions(self):
-        for action in super(DownAndDeletePolicy, self)._getHideOrDeleteActions():
-            yield action
+    def _getDeleteActions(self):
         if self.destinationFile is not None and self.sourceFile is None:
-            # Local files have either 0 or 1 versions.  If the file is there,
-            # it must have exactly 1 version.
             yield LocalDeleteAction(self.destinationFile.nativePath)
-
-
-def makeB2DeleteActions(sourceFile, destinationFile, transferred):
-    """
-    Creates the actions to delete files stored on B2, which are not present locally.
-    """
-    if destinationFile:
-        for version_index, version in enumerate(destinationFile.versions):
-            keep = (version_index == 0) and (sourceFile is not None) and not transferred
-            if not keep:
-                yield B2DeleteAction(
-                    destinationFile
-                )

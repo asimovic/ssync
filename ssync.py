@@ -9,7 +9,7 @@ from sync.sync import sync_folders
 from utility import config
 
 CONFIG_PATH = 'ssync.conf'
-REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'IndexPath': str }
+REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str }
 OPTIONAL_CONFIG = {'IndexFileId': str}
 
 def createArgs():
@@ -67,21 +67,22 @@ def processConfig():
 
 (conf, b2conf) = processConfig()
 
-security.compressAndEncrypt(conf, 'D:\Downloads\gs.mkv')
-#
-# if conf.args.test:
-#     b2Api = None
-# else:
-#     b2Api = backblaze_b2.setupApi(b2conf)
-#     b2Api.set_thread_pool_size(conf.args.workers)
-#
-# source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
-# destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
-#
-# sync_folders(
-#     source_folder=source,
-#     dest_folder=destination,
-#     now_millis=int(round(time.time() * 1000)),
-#     stdout=sys.stdout,
-#     conf=conf
-# )
+if conf.args.test:
+    b2Api = None
+else:
+    b2Api = backblaze_b2.setupApi(b2conf)
+    b2Api.set_thread_pool_size(conf.args.workers)
+
+source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
+destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
+
+sync_folders(
+    source_folder=source,
+    dest_folder=destination,
+    now_millis=int(round(time.time() * 1000)),
+    stdout=sys.stdout,
+    conf=conf
+)
+
+config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
+security.cleanupGpg()

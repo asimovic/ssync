@@ -38,12 +38,24 @@ def __setupGpg(conf):
         finally:
             __gpgLock.release()
 
+def cleanupGpg():
+    global gpg
+    if gpg is not None:
+        shutil.rmtree(gpg.gnupghome)
+    gpg = None
+
 def generateSecureName(filename):
     h = PasswordHasher(time_cost=1, memory_cost=512, parallelism=2)
     hs = h.hash(__SECURE_NAME_SALT + filename)
+    #trim the argon details, they should be constant anyway
+    hs = hs[28:]
     return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
 
-def compressAndEncrypt(conf, filename, computeHash=False):
+def compressAndEncrypt(conf, filename):
+    p, h = compressAndEncryptWithHash(conf, filename, False)
+    return p
+
+def compressAndEncryptWithHash(conf, filename, computeHash=True):
     global gpg
     __setupGpg(conf)
     tempPath = filename + util.APPLICATION_EXT
@@ -51,9 +63,10 @@ def compressAndEncrypt(conf, filename, computeHash=False):
 
     with open(filename, 'rb') as fin:
      with open(tempPath, 'wb') as fout:
-      with __getHashStream(fin, computeHash) as hin:
+      with HashStream(fin) as hin:
+       hin = hin if computeHash else fin
        with GzipCompressStream(hin) as gzip:
-        with gpg.openEncryptStreamSymmetric(gzip, conf.args.passphrase, compress=False) as ein:
+        with gpg.openEncryptStream(gzip, conf.GPGRecipient, compress=False) as ein:
          shutil.copyfileobj(ein, fout)
        hashDigest = hin.hexdigest() if computeHash else None
 
@@ -61,17 +74,13 @@ def compressAndEncrypt(conf, filename, computeHash=False):
 
 def decompressAndDecrypt(conf, path, destination):
     __setupGpg(conf)
+    computeHash = False
     util.silentRemove(destination)
 
     with open(path, 'rb') as fin:
      with open(destination, 'wb') as fout:
       with gpg.openDecryptStream(fin, conf.args.passphrase) as din:
        with GzipDecompressStream(din) as gzip:
-        with __getHashStream(gzip, False) as hin:
+        with HashStream(gzip) as hin:
+         hin = hin if computeHash else gzip
          shutil.copyfileobj(hin, fout)
-
-def __getHashStream(instream, computeHash):
-    if computeHash:
-        return HashStream(instream)
-    else:
-        return Passthrough(instream)

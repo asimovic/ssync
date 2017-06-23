@@ -72,7 +72,7 @@ class SecureIndex:
     __IDLE_DELAY_SEC = 2
     __MAX_DELAY_SEC = 5
 
-    def __init__(self, filename):
+    def __init__(self, filename, source=None):
         self.filename = filename
         self.__files = None
         self.__sortedFiles = None
@@ -83,6 +83,8 @@ class SecureIndex:
         self.pendingActions = []
         self.idleTmr = None
         self.maxTmr = None
+        self.source = source
+        self.hasChanges = False
 
     def get(self, path):
         self.__lazyLoad(False)
@@ -174,6 +176,7 @@ class SecureIndex:
         try:
             with self.__engine.begin() as conn:
                 for type, data in self.pendingActions:
+                    self.hasChanges = True
                     if type == 'a':
                         conn.execute(
                             IndexEntry.__table__

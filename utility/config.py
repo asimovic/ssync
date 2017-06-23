@@ -72,3 +72,18 @@ def readConfig(filename,
             setattr(config, item, val)
 
     return config
+
+def writeConfigValue(filename,
+                     sectionName,
+                     itemName,
+                     value):
+    value = '' if value is None else value
+
+    cfg = configparser.ConfigParser()
+    cfg.read(filename)
+    if not sectionName in cfg:
+        cfg[sectionName] = {}
+    cfg[sectionName][itemName] = value
+
+    with open(filename, 'w') as configfile:
+        cfg.write(configfile)

@@ -5,6 +5,7 @@ from b2.api import (B2Api, B2RawApi)
 from b2.api import Bucket
 from b2.b2http import (B2Http)
 from b2.cache import (AuthInfoCache)
+from b2.download_dest import DownloadDestLocalFile
 from b2.exception import B2Error
 from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
 from b2.upload_source import UploadSourceLocalFile
@@ -39,40 +40,40 @@ def getFileInfoByName(api, bucketName, fileName):
         return bucketFiles['files'][0]
 
 def getModTimeFromFileInfo(fileInfo):
-    if SRC_LAST_MODIFIED_MILLIS in fileInfo:
-        return int(fileInfo[SRC_LAST_MODIFIED_MILLIS])
-    else:
-        return fileInfo['uploadTimestamp']
+    """
+    get the mod time from the file info object for a remote file
+    :param fileInfo: file info dictionary returned from api
+    :return: mod time or None
+    """
+    # the fileInfo object should have a 'fileInfo' element which contains the custom info uploaded with the file
+    if fileInfo is not None and 'fileInfo' in fileInfo:
+        fileInfoData = fileInfo['fileInfo']
+        if SRC_LAST_MODIFIED_MILLIS in fileInfoData:
+            return int(fileInfoData[SRC_LAST_MODIFIED_MILLIS])
+    return None
 
 def downloadSecureFile(conf, api: B2Api, fileId, destination):
-    tempPath = os.path.join(conf.temp, os.path.basename(destination))
-    util.silentRemove(tempPath)
+    tempPath = destination + util.APPLICATION_EXT
 
-    api.download_file_by_id(fileId, tempPath)
+    dest = DownloadDestLocalFile(tempPath)
+    api.download_file_by_id(fileId, dest)
     security.decompressAndDecrypt(conf, tempPath, destination)
+    util.silentRemove(tempPath)
     return 0
 
-def uploadSecureFile(conf,
-                     bucket: Bucket,
-                     filepath,
-                     saveModTime=False,
-                     customName=None):
-
-    tempPath = os.path.join(conf.temp, os.path.basename(filepath))
-    util.silentRemove(tempPath)
-    security.compressAndEncrypt(tempPath, False)
-
-    if customName:
-        secureName = security.generateSecureName(customName)
-    else:
-        secureName = security.generateSecureName(filepath)
-
+def uploadSecureFile(conf, bucket: Bucket, filepath, saveModTime=False, customName=None):
+    name = customName if customName else filepath
     if saveModTime:
-        fileInfo = {SRC_LAST_MODIFIED_MILLIS: str(getModTimeFromFileInfo(filepath))}
+        fileInfo = {SRC_LAST_MODIFIED_MILLIS: str(util.getModTime(filepath))}
     else:
         fileInfo = None
 
-    uploadSource = UploadSourceLocalFile(filepath)
-    bucket.upload(uploadSource, secureName, file_info=fileInfo)
+    tempPath = security.compressAndEncrypt(conf, filepath)
+    secureName = security.generateSecureName(name)
 
-    return 0
+    uploadSource = UploadSourceLocalFile(tempPath)
+    fileVersionInfo = bucket.upload(uploadSource, secureName, file_info=fileInfo)
+
+    util.silentRemove(tempPath)
+
+    return fileVersionInfo

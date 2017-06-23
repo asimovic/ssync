@@ -37,7 +37,7 @@ def __parseSecureB2Folder(path, conf, api):
     if '//' in path:
         raise CommandError("'//' not allowed in path names")
     if path.count('/', 0, -1) == 0:
-        bucketName = path
+        bucketName = path.rstrip('/')
         folderName = ''
     else:
         (bucketName, folderName) = path.split('/', 1)

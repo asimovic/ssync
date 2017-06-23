@@ -33,17 +33,24 @@ class GpgExt(GPG):
         self.__stdin = None
         self.result = None
 
-    CHUNK = 1024 * 8
+    CHUNK = 1024
 
     def encrypt_file(self, file, recipients, sign=None,
             always_trust=False, passphrase=None,
             armor=True, output=None, symmetric=False):
         raise GpgExtError('method not supported use encrypFileEx instead')
 
-    def encrypFileEx(self, file, recipients, sign=None, passphrase=None, output=None, symmetric=False):
-        return super().encrypt_file(file=file, recipients=recipients, sign=sign,
+
+    def encrypFileExSymmetric(self, file, passphrase, symmetric=None, sign=None, output=None):
+        symmetric = True if symmetric is None else symmetric
+        return super().encrypt_file(file=file, recipients=None, sign=sign,
                                     always_trust=True, passphrase=passphrase,
                                     armor=False, output=output, symmetric=symmetric)
+
+    def encrypFileEx(self, file, recipients, passphrase=None, sign=None, output=None):
+        return super().encrypt_file(file=file, recipients=recipients, sign=sign,
+                                    always_trust=True, passphrase=passphrase,
+                                    armor=False, output=output, symmetric=False)
 
     def openDecryptStream(self, instream, passphrase=None):
         """

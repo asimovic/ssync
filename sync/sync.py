@@ -226,26 +226,36 @@ def sync_folders(
         if remoteFolder is None:
             raise ValueError('neither folder is a b2 folder')
 
-
         t1 = time.time()
         action_futures = []
         total_files = 0
         total_bytes = 0
+        acts = list(__make_folder_sync_actions(source_folder, dest_folder, conf.args, now_millis, reporter))
         for action in __make_folder_sync_actions(source_folder, dest_folder, conf.args, now_millis, reporter):
-            logging.debug('scheduling action %s on bucket %s')
-            action.run(remoteFolder, conf, reporter, conf.args.dryrun)
-            #future = sync_executor.submit(action.run, remoteFolder, conf, reporter, conf.args.dryrun)
+            runAction(action, remoteFolder, conf, reporter, conf.args.dryrun)
+            #future = sync_executor.submit(runAction, action, remoteFolder, conf, reporter, conf.args.dryrun)
             #action_futures.append(future)
             total_files += 1
-            total_bytes += action.get_bytes()
+            total_bytes += action[1].get_bytes() if isinstance(action, tuple) else action.get_bytes()
         reporter.end_compare(total_files, total_bytes)
 
         # Wait for everything to finish
         sync_executor.shutdown()
         remoteFolder.secureIndex.flush()
+        remoteFolder.secureIndex.source.uploadIndex(remoteFolder.secureIndex)
 
         t = time.time() - t1
         print(t)
 
         if any(1 for f in action_futures if f.exception() is not None):
             raise CommandError('sync is incomplete')
+
+def runAction(action, remoteFolder, conf, reporter, dry_run):
+    if isinstance(action, tuple):
+        actions = [action[0], action[1]]
+    else:
+        actions = [action]
+
+    for a in actions:
+        logging.debug('scheduling action %s on bucket %s')
+        a.run(remoteFolder, conf, reporter, dry_run)
