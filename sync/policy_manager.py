@@ -1,12 +1,3 @@
-######################################################################
-#
-# File: sync/policy_manager.py
-#
-# Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
-#
-######################################################################
-
 from .policy import DownAndDeletePolicy, DownPolicy
 from .policy import UpAndDeletePolicy, UpPolicy
 from enum import Enum

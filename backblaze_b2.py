@@ -1,5 +1,6 @@
 import os
 
+import logging
 from b2.account_info.sqlite_account_info import (SqliteAccountInfo)
 from b2.api import (B2Api, B2RawApi)
 from b2.api import Bucket
@@ -13,6 +14,7 @@ from b2.upload_source import UploadSourceLocalFile
 import security
 from utility import util
 
+log = logging.getLogger(__name__)
 
 def authorizeAccount(api, accountId, applicationKey):
     try:
@@ -59,6 +61,7 @@ def downloadSecureFile(conf, api: B2Api, fileId, destination):
     api.download_file_by_id(fileId, dest)
     security.decompressAndDecrypt(conf, tempPath, destination)
     util.silentRemove(tempPath)
+    log.info(f"Downloaded secure file: '{fileId}' to '{destination}'")
     return 0
 
 def uploadSecureFile(conf, bucket: Bucket, filepath, saveModTime=False, customName=None):
@@ -75,5 +78,6 @@ def uploadSecureFile(conf, bucket: Bucket, filepath, saveModTime=False, customNa
     fileVersionInfo = bucket.upload(uploadSource, secureName, file_info=fileInfo)
 
     util.silentRemove(tempPath)
+    log.info(f"Uploaded secure file: '{filepath}' to '{fileVersionInfo.id_}'")
 
     return fileVersionInfo

@@ -1,19 +1,13 @@
-######################################################################
-#
-# File: sync/folder.py
-#
-# Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
-#
-######################################################################
-
 import os
 import sys
+import logging
 from abc import ABCMeta, abstractmethod
 
 from utility import util
 from .exception import EnvironmentEncodingError
 from .path_entity import PathEntity, FileVersion
+
+log = logging.getLogger(__name__)
 
 
 class AbstractFolder(metaclass=ABCMeta):
@@ -85,7 +79,7 @@ class LocalFolder(AbstractFolder):
             try:
                 yield self.__makePathEntity(full_path, isDir)
             except:
-                print('Failed to create path entity: ' + full_path)
+                log.exception('Failed to create path entity: ' + full_path)
 
     def getFullPathForSubFile(self, fileEntity):
         return os.path.join(self.path, fileEntity.relativePath.replace('/', os.path.sep))
@@ -117,8 +111,8 @@ class LocalFolder(AbstractFolder):
         paths = []
         try:
             paths = os.listdir(dir_path)
-        except Exception:
-            print('Failed to get children of: ' + dir_path)
+        except:
+            log.exception('Failed to get children of: ' + dir_path)
 
         for name in paths:
             # We expect listdir() to return unicode if dir_path is unicode.
@@ -239,55 +233,3 @@ class SecureFolder(AbstractFolder):
 
     def __str__(self):
         return 'SecFolder: ' + self.path
-
-
-# class B2Folder(AbstractFolder):
-#     """
-#     Folder interface to B2.
-#     """
-#
-#     def __init__(self, bucket_name, folder_name, api):
-#         self.bucket_name = bucket_name
-#         self.folder_name = folder_name
-#         self.bucket = api.get_bucket_by_name(bucket_name)
-#         self.prefix = '' if self.folder_name == '' else self.folder_name + '/'
-#
-#     def all_files(self, reporter):
-#         current_name = None
-#         current_versions = []
-#         for (file_version_info, folder_name) in self.bucket.ls(
-#             self.folder_name, show_versions=True, recursive=True, fetch_count=1000
-#         ):
-#             assert file_version_info.file_name.startswith(self.prefix)
-#             if file_version_info.action == 'start':
-#                 continue
-#             file_name = file_version_info.file_name[len(self.prefix):]
-#             if current_name != file_name and current_name is not None:
-#                 yield PathEntity(current_name, False, current_versions)
-#                 current_versions = []
-#             file_info = file_version_info.file_info
-#             if SRC_LAST_MODIFIED_MILLIS in file_info:
-#                 mod_time_millis = int(file_info[SRC_LAST_MODIFIED_MILLIS])
-#             else:
-#                 mod_time_millis = file_version_info.upload_timestamp
-#             assert file_version_info.size is not None
-#             file_version = FileVersion(
-#                 file_version_info.id_, file_version_info.file_name, mod_time_millis,
-#                 file_version_info.action, file_version_info.size
-#             )
-#             current_versions.append(file_version)
-#             current_name = file_name
-#         if current_name is not None:
-#             yield PathEntity(current_name, False, current_versions)
-#
-#     def folder_type(self):
-#         return 'b2'
-#
-#     def make_full_path(self, file_name):
-#         if self.folder_name == '':
-#             return file_name
-#         else:
-#             return self.folder_name + '/' + file_name
-#
-#     def __str__(self):
-#         return 'B2Folder(%s, %s)' % (self.bucket_name, self.folder_name)

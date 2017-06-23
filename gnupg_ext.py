@@ -2,8 +2,12 @@ import codecs
 import threading
 
 import gnupg
+import logging
 from gnupg import GPG
+from utility import util
 from utility.byte_buffer import Buffer
+
+log = logging.getLogger(__name__)
 
 
 class GpgExtError(Exception):
@@ -192,3 +196,4 @@ class GpgExt(GPG):
         # python is so hacky
         if hasattr(result, 'stderr'):
             result.stderr.append(''.join(lines))
+        log.debug(''.join(lines))

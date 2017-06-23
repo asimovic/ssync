@@ -1,11 +1,3 @@
-######################################################################
-#
-# File: sync/file.py
-#
-# Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
-#
-######################################################################
 from functools import total_ordering
 
 @total_ordering

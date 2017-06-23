@@ -1,18 +1,9 @@
-######################################################################
-#
-# File: sync/action.py
-#
-# Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
-#
-######################################################################
-
-import logging
 import os
 import security
-from abc import (ABCMeta, abstractmethod)
-
 import six
+import logging
+
+from abc import (ABCMeta, abstractmethod)
 from b2.download_dest import DownloadDestLocalFile
 from b2.upload_source import UploadSourceLocalFile
 from b2.utils import raise_if_shutting_down
@@ -21,7 +12,7 @@ from index.secure_index import IndexEntry
 from utility import util
 from .report import SyncFileReporter
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 @six.add_metaclass(ABCMeta)
@@ -39,11 +30,12 @@ class AbstractAction(object):
     def run(self, remoteFolder, conf, reporter, dry_run=False):
         raise_if_shutting_down()
         try:
+            log.info('Running action: ' + str(self))
             if not dry_run:
                 self.do_action(remoteFolder, conf, reporter)
             self.do_report(reporter)
         except Exception as e:
-            logger.exception('an exception occurred in a sync action')
+            log.exception('an exception occurred in a sync action')
             reporter.error(str(self) + ": " + repr(e) + ' ' + str(e))
             raise  # Re-throw so we can identify failed actions
 
@@ -108,7 +100,9 @@ class B2UploadAction(AbstractAction):
         remoteFolder.secureIndex.add(ent)
 
     def do_report(self, reporter):
-        reporter.print_completion('upload ' + self.sourceFile.relativePath)
+        text = 'Uploaded ' + self.sourceFile.relativePath
+        reporter.print_completion(text)
+        return text
 
     def __str__(self):
         return 'b2_upload: ' + self.sourceFile.relativePath
@@ -146,7 +140,9 @@ class B2DownloadAction(AbstractAction):
         os.utime(self.localPath, (modTime, modTime))
 
     def do_report(self, reporter):
-        reporter.print_completion('download to ' + self.localPath)
+        text = 'Downloaded ' + self.localPath
+        reporter.print_completion(text)
+        return text
 
     def __str__(self):
         return f'b2_download: f={self.remoteFile}, lp={self.localPath}'
@@ -168,7 +164,9 @@ class B2DeleteAction(AbstractAction):
 
     def do_report(self, reporter):
         reporter.update_transfer(1, 0)
-        reporter.print_completion('delete ' + self.remoteFile.relativePath)
+        text = 'Deleted remote ' + self.remoteFile.relativePath
+        reporter.print_completion(text)
+        return text
 
     def __str__(self):
         return 'b2_delete: ' + self.remoteFile.relativePath
@@ -186,7 +184,9 @@ class LocalDeleteAction(AbstractAction):
 
     def do_report(self, reporter):
         reporter.update_transfer(1, 0)
-        reporter.print_completion('delete ' + self.path)
+        text = 'Deleted local ' + self.path
+        reporter.print_completion(text)
+        return text
 
     def __str__(self):
         return 'local_delete: ' + self.path

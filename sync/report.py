@@ -7,16 +7,15 @@
 #
 ######################################################################
 
-import logging
 import threading
 import time
+import logging
 
-import six
-
+from utility import util
 from b2.progress import AbstractProgressListener
 from b2.utils import format_and_scale_number, format_and_scale_fraction, raise_if_shutting_down
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class SyncReport(object):
@@ -139,7 +138,7 @@ class SyncReport(object):
                     '!WARNING! this terminal cannot properly handle progress reporting'
                 )
             self.stdout.write(line.encode('ascii', 'backslashreplace').decode())
-            logger.warning(
+            log.warning(
                 'could not output the following line on stdout due to UnicodeEncodeError: %s', line
             )
         if newline:
@@ -188,12 +187,12 @@ class SyncReport(object):
             self._update_progress()
 
     def local_access_error(self, path):
+        log.error(f'Path not found: {path}')
         self.warnings.append('WARNING: %s could not be accessed (broken symlink?)' % (path,))
 
     def local_permission_error(self, path):
-        self.warnings.append(
-            'WARNING: %s could not be accessed (no permissions to read?)' % (path,)
-        )
+        log.error(f'No permissions for path: {path}')
+        self.warnings.append('WARNING: %s could not be accessed (no permissions to read?)' % (path,))
 
 
 class SyncFileReporter(AbstractProgressListener):
@@ -215,34 +214,3 @@ class SyncFileReporter(AbstractProgressListener):
     def bytes_completed(self, byte_count):
         self.reporter.update_transfer(0, byte_count - self.bytes_so_far)
         self.bytes_so_far = byte_count
-
-
-def sample_sync_report_run():
-    import sys
-    sync_report = SyncReport(sys.stdout, False)
-
-    for i in six.moves.range(20):
-        sync_report.update_local(1)
-        time.sleep(0.2)
-        if i == 10:
-            sync_report.print_completion('transferred: a.txt')
-        if i % 2 == 0:
-            sync_report.update_compare(1)
-    sync_report.end_local()
-
-    for i in six.moves.range(10):
-        sync_report.update_compare(1)
-        time.sleep(0.2)
-        if i == 3:
-            sync_report.print_completion('transferred: b.txt')
-        if i == 4:
-            sync_report.update_transfer(25, 25000)
-    sync_report.end_compare(50, 50000)
-
-    for i in six.moves.range(25):
-        if i % 2 == 0:
-            sync_report.print_completion('transferred: %d.txt' % i)
-        sync_report.update_transfer(1, 1000)
-        time.sleep(0.2)
-
-    sync_report.close()

@@ -1,18 +1,11 @@
-######################################################################
-#
-# File: sync/folder_parser.py
-#
-# Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
-#
-######################################################################
-
+import logging
 from b2.exception import CommandError
 
 from index.secure_index_factory import SecureIndexFactory
 from utility import util
 from .folder import LocalFolder, SecureFolder
 
+log = logging.getLogger(__name__)
 
 def parseSyncDir(dirPath, conf, api):
     """
@@ -22,8 +15,10 @@ def parseSyncDir(dirPath, conf, api):
     Anything else is treated like a local folder.
     """
     if dirPath.startswith('b2://'):
+        log.info(f'Parsing {dirPath} as B2 path')
         return __parseSecureB2Folder(dirPath, conf, api)
     else:
+        log.info(f'Parsing {dirPath} as local path')
         return LocalFolder(dirPath)
 
 

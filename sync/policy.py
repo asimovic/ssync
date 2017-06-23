@@ -1,16 +1,5 @@
-######################################################################
-#
-# File: sync/policy.py
-#
-# Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
-#
-######################################################################
-
 from abc import ABCMeta, abstractmethod
-
 from b2.exception import CommandError
-
 from utility import util
 from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction, B2UploadAction
 

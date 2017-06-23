@@ -12,16 +12,16 @@ from __future__ import division
 import logging
 import re
 import time
-
-import six
+import datetime
 import threading
 
+from utility import util
 from b2.exception import CommandError
 from .policy_manager import POLICY_MANAGER, SyncType
 from .report import SyncReport
 import concurrent.futures as futures
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 def __nextOrNone(iterator):
@@ -36,18 +36,18 @@ def __filter_folder(folder, reporter, exclusions, inclusions):
     Filters a folder through a list of exclusions and inclusions.
     Inclusions override exclusions.
     """
-    logging.debug('_filter_folder() exclusions for %s are %s', folder, exclusions)
-    logging.debug('_filter_folder() inclusions for %s are %s', folder, inclusions)
+    log.debug('_filter_folder() exclusions for %s are %s', folder, exclusions)
+    log.debug('_filter_folder() inclusions for %s are %s', folder, inclusions)
     useIgnore = len(exclusions) > 0
 
     for f in folder.all_files(reporter):
         if useIgnore:
             if any(pattern.match(f.name) for pattern in inclusions):
-                logging.debug('_filter_folder() included %s from %s', f, folder)
+                log.debug('_filter_folder() included %s from %s', f, folder)
                 yield f
                 continue
             if any(pattern.match(f.name) for pattern in exclusions):
-                logging.debug('_filter_folder() excluded %s from %s', f, folder)
+                log.debug('_filter_folder() excluded %s from %s', f, folder)
                 continue
         yield f
 
@@ -119,9 +119,9 @@ def __make_folder_sync_actions(sourceDir, destinationDir, args, now_millis, repo
     for (source_file, dest_file) in \
             __iter_folders(sourceDir, destinationDir, reporter, exclusions, inclusions):
         if source_file is None:
-            logging.debug('determined that %s is not present on source', dest_file)
+            log.debug('determined that %s is not present on source', dest_file)
         elif dest_file is None:
-            logging.debug('determined that %s is not present on destination', source_file)
+            log.debug('determined that %s is not present on destination', source_file)
 
         if sourceDir.type() == 'local':
             if source_file is not None:
@@ -188,6 +188,9 @@ def sync_folders(
     source is also in the destination.
     """
 
+    if conf.args.dryrun:
+        log.info('Running dryrun')
+
     # For downloads, make sure that the target directory is there.
     if dest_folder.type() == 'local' and not conf.args.dryrun:
         dest_folder.ensure_present()
@@ -226,11 +229,11 @@ def sync_folders(
         if remoteFolder is None:
             raise ValueError('neither folder is a b2 folder')
 
+        log.info('Starting folder scan')
         t1 = time.time()
         action_futures = []
         total_files = 0
         total_bytes = 0
-        acts = list(__make_folder_sync_actions(source_folder, dest_folder, conf.args, now_millis, reporter))
         for action in __make_folder_sync_actions(source_folder, dest_folder, conf.args, now_millis, reporter):
             runAction(action, remoteFolder, conf, reporter, conf.args.dryrun)
             #future = sync_executor.submit(runAction, action, remoteFolder, conf, reporter, conf.args.dryrun)
@@ -245,7 +248,7 @@ def sync_folders(
         remoteFolder.secureIndex.source.uploadIndex(remoteFolder.secureIndex)
 
         t = time.time() - t1
-        print(t)
+        log.info(f'Sync complete in {str(datetime.timedelta(seconds=round(t)))}')
 
         if any(1 for f in action_futures if f.exception() is not None):
             raise CommandError('sync is incomplete')
@@ -257,5 +260,5 @@ def runAction(action, remoteFolder, conf, reporter, dry_run):
         actions = [action]
 
     for a in actions:
-        logging.debug('scheduling action %s on bucket %s')
+        log.debug(f'scheduling action {a} on {remoteFolder}')
         a.run(remoteFolder, conf, reporter, dry_run)

@@ -4,9 +4,16 @@ import time
 
 import backblaze_b2
 import security
+import logging
+import logging.config
 from sync import folder_parser
 from sync.sync import sync_folders
 from utility import config
+from utility import util
+
+util.checkDirectory('logs')
+logging.config.fileConfig('logging.conf')
+log = logging.getLogger(__name__)
 
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str }
@@ -43,10 +50,11 @@ def createArgs():
     return parser
 
 def processConfig():
-    print('copnfi')
+    log.info('Parsing Arguments')
     parser = createArgs()
     args = parser.parse_args()
 
+    log.info('Reading configuration')
     conf = config.readConfig(CONFIG_PATH,
                              'SSync',
                              REQUIRED_CONFIG,
@@ -65,6 +73,11 @@ def processConfig():
 
     return conf, b2conf
 
+def logException(exctype, value, tb):
+    log.fatal(f'Unhandled exception ({exctype}): {value}\r\n{tb}')
+    pass
+
+log.info('Starting ssync')
 (conf, b2conf) = processConfig()
 
 if conf.args.test:
@@ -73,16 +86,26 @@ else:
     b2Api = backblaze_b2.setupApi(b2conf)
     b2Api.set_thread_pool_size(conf.args.workers)
 
-source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
-destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
+log.info(f'Starting sync from: {conf.args.source} to {conf.args.destination}')
 
-sync_folders(
-    source_folder=source,
-    dest_folder=destination,
-    now_millis=int(round(time.time() * 1000)),
-    stdout=sys.stdout,
-    conf=conf
-)
+try:
+    source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
+    destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
+except:
+    log.exception('Invalid source or destination')
+    exit(1)
 
-config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
-security.cleanupGpg()
+try:
+    sync_folders(
+        source_folder=source,
+        dest_folder=destination,
+        now_millis=int(round(time.time() * 1000)),
+        stdout=sys.stdout,
+        conf=conf
+    )
+
+    config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
+    security.cleanupGpg()
+except:
+    log.exception('Sync failed')
+    exit(1)
