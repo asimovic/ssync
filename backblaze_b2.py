@@ -14,7 +14,7 @@ from b2.upload_source import UploadSourceLocalFile
 import security
 from utility import util
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 def authorizeAccount(api, accountId, applicationKey):
     try:

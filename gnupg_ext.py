@@ -1,13 +1,13 @@
 import codecs
 import threading
-
+import os
 import gnupg
 import logging
 from gnupg import GPG
 from utility import util
 from utility.byte_buffer import Buffer
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class GpgExtError(Exception):
@@ -173,10 +173,10 @@ class GpgExt(GPG):
         while True:
             try:
                 line = stream.readline()
+                line = '' if line is None else line.rstrip()
                 if len(line) == 0:
                     break
                 lines.append(line)
-                line = line.rstrip()
                 if self.verbose:  # pragma: no cover
                     print(line)
                 if line[0:9] == '[GNUPG:] ':
@@ -192,8 +192,9 @@ class GpgExt(GPG):
             except Exception as e:
                 line = 'Exception: ' + str(e)
                 lines.append(line)
+                log.exception('Failed to get stderr from gpg')
                 break
         # python is so hacky
         if hasattr(result, 'stderr'):
             result.stderr.append(''.join(lines))
-        log.debug(''.join(lines))
+        log.debug(os.linesep.join(lines))

@@ -7,7 +7,7 @@ from utility import util
 from .exception import EnvironmentEncodingError
 from .path_entity import PathEntity, FileVersion
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class AbstractFolder(metaclass=ABCMeta):
@@ -120,6 +120,10 @@ class LocalFolder(AbstractFolder):
             # encoding, then listdir() will return un-decoded str/bytes.
             if not isinstance(name, str):
                 name = self.__handle_non_unicode_file_name(name)
+
+            # Ignore temp files created for encryption
+            if name.endswith(util.APPLICATION_EXT):
+                continue
 
             full_path = os.path.join(dir_path, name)
 

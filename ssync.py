@@ -1,7 +1,7 @@
 import argparse
 import sys
 import time
-
+import os
 import backblaze_b2
 import security
 import logging
@@ -13,7 +13,7 @@ from utility import util
 
 util.checkDirectory('logs')
 logging.config.fileConfig('logging.conf')
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str }
@@ -74,7 +74,7 @@ def processConfig():
     return conf, b2conf
 
 def logException(exctype, value, tb):
-    log.fatal(f'Unhandled exception ({exctype}): {value}\r\n{tb}')
+    log.fatal(f'Unhandled exception ({exctype}): {value}{os.linesep}{tb}')
     pass
 
 log.info('Starting ssync')

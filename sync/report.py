@@ -15,7 +15,7 @@ from utility import util
 from b2.progress import AbstractProgressListener
 from b2.utils import format_and_scale_number, format_and_scale_fraction, raise_if_shutting_down
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 class SyncReport(object):

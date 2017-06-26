@@ -5,7 +5,7 @@ from index.secure_index_factory import SecureIndexFactory
 from utility import util
 from .folder import LocalFolder, SecureFolder
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 def parseSyncDir(dirPath, conf, api):
     """

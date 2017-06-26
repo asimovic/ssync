@@ -12,7 +12,7 @@ from index.secure_index import IndexEntry
 from utility import util
 from .report import SyncFileReporter
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 @six.add_metaclass(ABCMeta)

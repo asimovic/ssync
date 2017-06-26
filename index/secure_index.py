@@ -72,7 +72,7 @@ class SecureIndex:
     __IDLE_DELAY_SEC = 2
     __MAX_DELAY_SEC = 5
 
-    def __init__(self, filename, source=None):
+    def __init__(self, filename, source=None, forceUpload=False):
         self.filename = filename
         self.__files = None
         self.__sortedFiles = None
@@ -84,7 +84,7 @@ class SecureIndex:
         self.idleTmr = None
         self.maxTmr = None
         self.source = source
-        self.hasChanges = False
+        self.hasChanges = forceUpload
 
     def get(self, path):
         self.__lazyLoad(False)

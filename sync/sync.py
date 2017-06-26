@@ -21,7 +21,7 @@ from .policy_manager import POLICY_MANAGER, SyncType
 from .report import SyncReport
 import concurrent.futures as futures
 
-log = logging.getLogger(__name__)
+log = logging.getLogger()
 
 
 def __nextOrNone(iterator):
