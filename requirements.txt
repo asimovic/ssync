@@ -1,4 +1,13 @@
 sqlalchemy>=1.1.10
-b2>=0.7.2
 argon2-cffi>=16.3.0
 python-gnupg>=0.4.0
+
+#using a custom version b2 because there where some optimizations that needed to be made
+#b2>=0.7.2
+
+#required for b2, remove if using the b2 module
+arrow>=0.8.0
+logfury>=0.1.2
+requests>=2.9.1
+six>=1.10
+tqdm>=4.5.0

@@ -4,9 +4,9 @@ import six
 import logging
 
 from abc import (ABCMeta, abstractmethod)
-from b2.download_dest import DownloadDestLocalFile
-from b2.upload_source import UploadSourceLocalFile
-from b2.utils import raise_if_shutting_down
+from b2_ext.download_dest import DownloadDestLocalFile
+from b2_ext.upload_source import UploadSourceLocalFile
+from b2_ext.utils import raise_if_shutting_down
 
 from index.secure_index import IndexEntry
 from utility import util
@@ -67,37 +67,64 @@ class B2UploadAction(AbstractAction):
 
     def do_action(self, remoteFolder, conf, reporter):
         sf = self.sourceFile
-        b2Id = None
-        b2Name = None
-
-        if not sf.isDir:
-            b2Name = security.generateSecureName(sf.relativePath)
-
-            if not conf.args.test:
-                getHash = sf.latest_version().hash is None
-                tempPath, hashDigest = security.compressAndEncryptWithHash(conf, sf.nativePath, getHash)
-                if getHash:
-                    sf.latest_version().hash = hashDigest
-
-                info = remoteFolder.bucket.upload(
-                    UploadSourceLocalFile(tempPath),
-                    b2Name,
-                    progress_listener=SyncFileReporter(reporter)
-                )
-                b2Id = info.id_
-                b2Name = info.file_name
-
-                # delete the temp file after the upload
-                util.silentRemove(tempPath)
 
         ent = IndexEntry(path=sf.relativePath,
                          isDir=sf.isDir,
                          size=sf.latest_version().size,
                          modTime=sf.latest_version().mod_time,
-                         hash=sf.latest_version().hash,
-                         remoteId=b2Id,
-                         remoteName=b2Name)
-        remoteFolder.secureIndex.add(ent)
+                         hash=None,
+                         remoteId=None,
+                         remoteName=None)
+
+        if not sf.isDir:
+            b2Name = security.generateSecureName(sf.relativePath)
+
+            if not conf.args.test:
+                resume = False
+                getHash = sf.latest_version().hash is None
+
+                # check if we need to resume a large file upload
+                if os.path.exists(security.getTempPath(sf.nativePath)):
+                    log.info('Found temp file for: ' + sf.relativePath)
+                    ie = remoteFolder.secureIndex.get(sf.relativePath)
+                    resume = ie and ie.status == 'uploading'
+                    if not resume:
+                        log.info('No pending upload for file')
+
+                tempPath = None
+                if resume:
+                    log.info('Attempting to resume upload from temp file')
+                    sf.latest_version().hash = ie.hash
+                    #todo:add temp file validation
+                    log.info('Resuming previous upload')
+                    tempPath = security.getTempPath(sf.nativePath)
+
+                if tempPath is None:
+                    tempPath, hashDigest = security.compressAndEncryptWithHash(conf, sf.nativePath, getHash)
+                    if getHash:
+                        sf.latest_version().hash = hashDigest
+                ent.hash = sf.latest_version().hash
+
+                # write working status so we don't have to re-encrypt when resuming large files
+                if self.sourceFile.latest_version().size > conf.largeFileBytes:
+                    ent.status = 'uploading'
+                    remoteFolder.secureIndex.addorUpdate(ent)
+
+                info = remoteFolder.bucket.upload(
+                    UploadSourceLocalFile(tempPath),
+                    b2Name,
+                    min_large_file_size=conf.largeFileBytes,
+                    ignore_unfinished_check=not resume,
+                    progress_listener=SyncFileReporter(reporter)
+                )
+                ent.remoteId = info.id_
+                ent.remoteName = info.file_name
+
+                # delete the temp file after the upload
+                util.silentRemove(tempPath)
+
+        ent.status = None
+        remoteFolder.secureIndex.addorUpdate(ent)
 
     def do_report(self, reporter):
         text = 'Uploaded ' + self.sourceFile.relativePath

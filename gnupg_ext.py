@@ -189,6 +189,8 @@ class GpgExt(GPG):
                     else:
                         value = ""
                     result.handle_status(keyword, value)
+            except ValueError: # buffer error occurs when reading the stream as its closed sometimes
+                pass
             except Exception as e:
                 line = 'Exception: ' + str(e)
                 lines.append(line)
@@ -197,4 +199,4 @@ class GpgExt(GPG):
         # python is so hacky
         if hasattr(result, 'stderr'):
             result.stderr.append(''.join(lines))
-        log.debug(os.linesep.join(lines))
+        log.trace(os.linesep.join(lines))

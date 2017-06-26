@@ -210,6 +210,10 @@ class SecureFolder(AbstractFolder):
                 if not fileInfo.path.startswith(self.path.lower()):
                     break;
 
+            # ignore files that were uploading, we want to resume them, so they shouldn't appear in the secure folder
+            if fileInfo.status == 'uploading':
+                continue
+
             version = FileVersion(id_=fileInfo.remoteId,
                                   size=fileInfo.size,
                                   mod_time=fileInfo.modTime,

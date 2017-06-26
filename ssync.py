@@ -10,13 +10,14 @@ from sync import folder_parser
 from sync.sync import sync_folders
 from utility import config
 from utility import util
+from utility import humanize
 
-util.checkDirectory('logs')
-logging.config.fileConfig('logging.conf')
+util.setupLogging('logging.conf')
 log = logging.getLogger()
 
 CONFIG_PATH = 'ssync.conf'
-REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str }
+REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str,
+                   'LargeFileSize': str}
 OPTIONAL_CONFIG = {'IndexFileId': str}
 
 def createArgs():
@@ -70,6 +71,8 @@ def processConfig():
         conf.args.exclude = []
     if not conf.args.include:
         conf.args.include = []
+
+    conf.__setattr__('largeFileBytes', humanize.human2bytes(conf.LargeFileSize))
 
     return conf, b2conf
 

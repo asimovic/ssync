@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from b2.exception import CommandError
+from b2_ext.exception import CommandError
 from utility import util
 from .action import LocalDeleteAction, B2DeleteAction, B2DownloadAction, B2UploadAction
 

@@ -1,6 +1,8 @@
 import hashlib
+import logging
 import logging.config
 import os
+import inspect
 from contextlib import contextmanager
 
 APPLICATION_EXT = '.ssynctmp'
@@ -56,3 +58,24 @@ def normalizePath(path, isDir):
     if isDir and not normalRelativePath.endswith('/'):
         normalRelativePath += '/'
     return normalRelativePath
+
+def setupLogging(configFile):
+    TRACE_LEVEL = 5
+
+    checkDirectory('logs')
+    logging.addLevelName(TRACE_LEVEL, "TRACE")
+    logging.config.fileConfig(configFile)
+
+    def trace(self, message, *args, **kws):
+        # Yes, logger takes its '*args' as 'args'.
+        if self.isEnabledFor(TRACE_LEVEL):
+            self._log(TRACE_LEVEL, message, args, **kws)
+
+    logging.Logger.trace = trace
+
+def props(obj):
+    pr = {}
+    for k, v in obj.__dict__.items():
+        if not k.startswith('_') and not inspect.ismethod(k):
+            pr[k] = v
+    return pr

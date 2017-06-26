@@ -1,5 +1,5 @@
 import logging
-from b2.exception import CommandError
+from b2_ext.exception import CommandError
 
 from index.secure_index_factory import SecureIndexFactory
 from utility import util

@@ -1,13 +1,14 @@
 ######################################################################
 #
-# File: sync/exception.py
+# File: b2/sync/exception.py
 #
 # Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
+#
+# License https://www.backblaze.com/using_b2_code.html
 #
 ######################################################################
 
-from b2_ext.exception import B2Error
+from ..exception import B2Error
 
 
 class EnvironmentEncodingError(B2Error):

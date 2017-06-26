@@ -33,6 +33,7 @@ class IndexEntry(Base):
     hash = Column(String)
     remoteId = Column(String)
     remoteName = Column(String)
+    status = Column(String)
 
     def __init__(self, path, isDir, size, modTime, hash, remoteId, remoteName):
         self.path = path
@@ -100,42 +101,31 @@ class SecureIndex:
         return self.__sortedFiles
 
     def add(self, file: IndexEntry):
-        self.__lazyLoad()
-        self.lock.reader_acquire()
-        try:
+        def tmp():
             self.__addEntry(file)
-            self.__delayWrite()
-        finally:
-            self.lock.reader_release()
+        self.__readLock(tmp)
+
+    def addorUpdate(self, file: IndexEntry):
+        def tmp():
+            self.__addOrUpdateEntry(file)
+        self.__readLock(tmp)
 
     def addAll(self, files):
-        self.__lazyLoad()
-        self.lock.reader_acquire()
-        try:
+        def tmp():
             for f in files:
                 self.__addEntry(f)
-            self.__delayWrite()
-        finally:
-            self.lock.reader_release()
+        self.__readLock(tmp)
 
     def remove(self, file: IndexEntry):
-        self.__lazyLoad()
-        self.lock.reader_acquire()
-        try:
+        def tmp():
             self.__removeEntry(file)
-            self.__delayWrite()
-        finally:
-            self.lock.reader_release()
+        self.__readLock(tmp)
 
     def removeAll(self, files):
-        self.__lazyLoad()
-        self.lock.reader_acquire()
-        try:
+        def tmp():
             for f in files:
                 self.__removeEntry(f)
-            self.__delayWrite()
-        finally:
-            self.lock.reader_release()
+        self.__readLock(tmp)
 
     def clear(self):
         self.lock.reader_acquire()
@@ -146,6 +136,15 @@ class SecureIndex:
         finally:
             self.lock.reader_release()
         self.__lazyLoad()
+
+    def __readLock(self, func):
+        self.__lazyLoad()
+        self.lock.reader_acquire()
+        try:
+            func()
+            self.__delayWrite()
+        finally:
+            self.lock.reader_release()
 
     def flush(self):
         self.__writePending()
@@ -188,6 +187,15 @@ class SecureIndex:
                                 .delete()
                                 .where(IndexEntry.path == bindparam('path')),
                             [{'path':data}])
+                    elif type == 'u':
+                        # update is very finicky, all of the properies passed to values have to exist in the db
+                        # also the bindparam name can't exist in the object
+                        conn.execute(
+                            IndexEntry.__table__
+                                .update()
+                                .where(IndexEntry.path == bindparam('x1'))
+                                .values(util.props(data)), # __dict__ doesnt work because SqlA creates extra properties
+                            [{'x1':data.path}])
                     elif type == 't':
                         conn.execute('DELETE FROM ' + INDEX_TABLE_NAME)
                 self.pendingActions.clear()
@@ -212,3 +220,7 @@ class SecureIndex:
         self.__files[file.path] = file
         self.pendingActions.append(('a', copy.copy(file)))
 
+    def __addOrUpdateEntry(self, file):
+        action = 'u' if file.path in self.__files else 'a'
+        self.__files[file.path] = file
+        self.pendingActions.append((action, copy.copy(file)))

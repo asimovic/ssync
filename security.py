@@ -1,11 +1,8 @@
 import base64
 import shutil
 import threading
-
-import time
-from argon2 import PasswordHasher
-
 import gnupg_ext
+from argon2_ext import ArgonHasher
 from utility import util
 from utility.gzip_stream import GzipCompressStream
 from utility.gzip_stream import GzipDecompressStream
@@ -22,6 +19,7 @@ class Passthrough(object):
 
 
 __SECURE_NAME_SALT = 'c3ViamVjdHM'
+__ARGON_SALT = b'\xa3\xfe\xc1eZ\xb6\xe3T\x08w\xb1?E\xc3\xd7\xd1'
 __gpgLock = threading.Lock()
 
 gpg = None
@@ -45,10 +43,10 @@ def cleanupGpg():
     gpg = None
 
 def generateSecureName(filename):
-    h = PasswordHasher(time_cost=1, memory_cost=512, parallelism=2)
-    hs = h.hash(__SECURE_NAME_SALT + filename)
-    #trim the argon details, they should be constant anyway
-    hs = hs[28:]
+    h = ArgonHasher(time_cost=1, memory_cost=512, parallelism=2, salt_len=0)
+    hs = h.hashWithFixedSalt(__SECURE_NAME_SALT + filename, __ARGON_SALT)
+    #trim the argon details and salt, they should be constant anyway
+    hs = hs[51:]
     return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
 
 def compressAndEncrypt(conf, filename):
@@ -58,7 +56,7 @@ def compressAndEncrypt(conf, filename):
 def compressAndEncryptWithHash(conf, filename, computeHash=True):
     global gpg
     __setupGpg(conf)
-    tempPath = filename + util.APPLICATION_EXT
+    tempPath = getTempPath(filename)
     util.silentRemove(tempPath)
 
     with open(filename, 'rb') as fin:
@@ -84,3 +82,6 @@ def decompressAndDecrypt(conf, path, destination):
         with HashStream(gzip) as hin:
          hin = hin if computeHash else gzip
          shutil.copyfileobj(hin, fout)
+
+def getTempPath(filePath):
+    return filePath + util.APPLICATION_EXT

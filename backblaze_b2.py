@@ -1,15 +1,15 @@
 import os
 
 import logging
-from b2.account_info.sqlite_account_info import (SqliteAccountInfo)
-from b2.api import (B2Api, B2RawApi)
-from b2.api import Bucket
-from b2.b2http import (B2Http)
-from b2.cache import (AuthInfoCache)
-from b2.download_dest import DownloadDestLocalFile
-from b2.exception import B2Error
-from b2.raw_api import SRC_LAST_MODIFIED_MILLIS
-from b2.upload_source import UploadSourceLocalFile
+from b2_ext.account_info.sqlite_account_info import (SqliteAccountInfo)
+from b2_ext.api import (B2Api, B2RawApi)
+from b2_ext.api import Bucket
+from b2_ext.b2http import (B2Http)
+from b2_ext.cache import (AuthInfoCache)
+from b2_ext.download_dest import DownloadDestLocalFile
+from b2_ext.exception import B2Error
+from b2_ext.raw_api import SRC_LAST_MODIFIED_MILLIS
+from b2_ext.upload_source import UploadSourceLocalFile
 
 import security
 from utility import util
@@ -55,7 +55,7 @@ def getModTimeFromFileInfo(fileInfo):
     return None
 
 def downloadSecureFile(conf, api: B2Api, fileId, destination):
-    tempPath = destination + util.APPLICATION_EXT
+    tempPath = security.getTempPath(destination)
 
     dest = DownloadDestLocalFile(tempPath)
     api.download_file_by_id(fileId, dest)

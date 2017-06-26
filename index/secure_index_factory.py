@@ -1,6 +1,6 @@
 import os
 
-from b2.api import B2Api
+from b2_ext.api import B2Api
 
 import backblaze_b2
 import security

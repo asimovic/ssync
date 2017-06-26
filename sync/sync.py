@@ -16,7 +16,7 @@ import datetime
 import threading
 
 from utility import util
-from b2.exception import CommandError
+from b2_ext.exception import CommandError
 from .policy_manager import POLICY_MANAGER, SyncType
 from .report import SyncReport
 import concurrent.futures as futures
