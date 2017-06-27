@@ -121,6 +121,7 @@ class SyncReport(object):
                 self._print_line(message, False)
 
     def _print_line(self, line, newline):
+        return
         """
         Prints a line to stdout.
 

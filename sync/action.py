@@ -2,6 +2,7 @@ import os
 import security
 import six
 import logging
+import threading
 
 from abc import (ABCMeta, abstractmethod)
 from b2_ext.download_dest import DownloadDestLocalFile
@@ -30,7 +31,7 @@ class AbstractAction(object):
     def run(self, remoteFolder, conf, reporter, dry_run=False):
         raise_if_shutting_down()
         try:
-            log.info('Running action: ' + str(self))
+            log.info(f'Starting action ({threading.get_ident()}): {str(self)}')
             if not dry_run:
                 self.do_action(remoteFolder, conf, reporter)
             self.do_report(reporter)
@@ -79,47 +80,48 @@ class B2UploadAction(AbstractAction):
         if not sf.isDir:
             b2Name = security.generateSecureName(sf.relativePath)
 
-            if not conf.args.test:
-                resume = False
-                getHash = sf.latest_version().hash is None
+            resume = False
+            getHash = sf.latest_version().hash is None
 
-                # check if we need to resume a large file upload
-                if os.path.exists(security.getTempPath(sf.nativePath)):
-                    log.info('Found temp file for: ' + sf.relativePath)
-                    ie = remoteFolder.secureIndex.get(sf.relativePath)
-                    resume = ie and ie.status == 'uploading'
-                    if not resume:
-                        log.info('No pending upload for file')
+            # check if we need to resume a large file upload
+            if os.path.exists(security.getTempPath(sf.nativePath)):
+                log.info('Found temp file for: ' + sf.relativePath)
+                ie = remoteFolder.secureIndex.get(sf.relativePath)
+                resume = ie and ie.status == 'uploading'
+                if not resume:
+                    log.info('No pending upload for file')
 
-                tempPath = None
-                if resume:
-                    log.info('Attempting to resume upload from temp file')
-                    sf.latest_version().hash = ie.hash
-                    #todo:add temp file validation
-                    log.info('Resuming previous upload')
-                    tempPath = security.getTempPath(sf.nativePath)
+            tempPath = None
+            if resume:
+                log.info('Attempting to resume upload from temp file')
+                sf.latest_version().hash = ie.hash
+                #todo:add temp file validation
+                log.info('Resuming previous upload')
+                tempPath = security.getTempPath(sf.nativePath)
 
-                if tempPath is None:
-                    tempPath, hashDigest = security.compressAndEncryptWithHash(conf, sf.nativePath, getHash)
-                    if getHash:
-                        sf.latest_version().hash = hashDigest
-                ent.hash = sf.latest_version().hash
+            if tempPath is None:
+                tempPath, hashDigest = security.compressAndEncryptWithHash(conf, sf.nativePath, getHash)
+                if getHash:
+                    sf.latest_version().hash = hashDigest
+            ent.hash = sf.latest_version().hash
 
-                # write working status so we don't have to re-encrypt when resuming large files
-                if self.sourceFile.latest_version().size > conf.largeFileBytes:
-                    ent.status = 'uploading'
-                    remoteFolder.secureIndex.addorUpdate(ent)
+            # write working status so we don't have to re-encrypt when resuming large files
+            if self.sourceFile.latest_version().size > conf.largeFileBytes:
+                ent.status = 'uploading'
+                remoteFolder.secureIndex.addorUpdate(ent)
 
-                info = remoteFolder.bucket.upload(
-                    UploadSourceLocalFile(tempPath),
-                    b2Name,
-                    min_large_file_size=conf.largeFileBytes,
-                    ignore_unfinished_check=not resume,
-                    progress_listener=SyncFileReporter(reporter)
-                )
-                ent.remoteId = info.id_
-                ent.remoteName = info.file_name
-
+            try:
+                if not conf.args.test:
+                    info = remoteFolder.bucket.upload(
+                        UploadSourceLocalFile(tempPath),
+                        b2Name,
+                        min_large_file_size=conf.largeFileBytes,
+                        ignore_unfinished_check=not resume,
+                        progress_listener=SyncFileReporter(reporter)
+                    )
+                    ent.remoteId = info.id_
+                    ent.remoteName = info.file_name
+            finally:
                 # delete the temp file after the upload
                 util.silentRemove(tempPath)
 

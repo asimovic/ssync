@@ -235,9 +235,9 @@ def sync_folders(
         total_files = 0
         total_bytes = 0
         for action in __make_folder_sync_actions(source_folder, dest_folder, conf.args, now_millis, reporter):
-            runAction(action, remoteFolder, conf, reporter, conf.args.dryrun)
-            #future = sync_executor.submit(runAction, action, remoteFolder, conf, reporter, conf.args.dryrun)
-            #action_futures.append(future)
+            #runAction(action, remoteFolder, conf, reporter, conf.args.dryrun)
+            future = sync_executor.submit(runAction, action, remoteFolder, conf, reporter, conf.args.dryrun)
+            action_futures.append(future)
             total_files += 1
             total_bytes += action[1].get_bytes() if isinstance(action, tuple) else action.get_bytes()
         reporter.end_compare(total_files, total_bytes)

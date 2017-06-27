@@ -1,4 +1,5 @@
 import base64
+import os
 import shutil
 import threading
 import gnupg_ext
@@ -22,25 +23,30 @@ __SECURE_NAME_SALT = 'c3ViamVjdHM'
 __ARGON_SALT = b'\xa3\xfe\xc1eZ\xb6\xe3T\x08w\xb1?E\xc3\xd7\xd1'
 __gpgLock = threading.Lock()
 
-gpg = None
+gpgCache = {}
 
-def __setupGpg(conf):
-    global gpg
-    if gpg is None:
-        try:
-            __gpgLock.acquire()
-            if gpg is None:
-                gpg = gnupg_ext.GpgExt(gnupghome=conf.GPGHome)
-                with open(conf.GPGKeyFile, 'r') as keyFile:
-                    gpg.import_keys(keyFile.read())
-        finally:
-            __gpgLock.release()
+def __getGpg(conf):
+    global gpgCache
+    tid = threading.get_ident()
+    if tid in gpgCache:
+        return gpgCache[tid]
+    try:
+        __gpgLock.acquire()
+        if not tid in gpgCache:
+            # seperate home paths to prevent crashes when encrypting
+            homeDir = os.path.join(conf.GPGHome, str(tid))
+            gpg = gnupg_ext.GpgExt(gnupghome=homeDir)
+            with open(conf.GPGKeyFile, 'r') as keyFile:
+                gpg.import_keys(keyFile.read())
+            gpgCache[tid] = gpg
+            return gpg
+    finally:
+        __gpgLock.release()
 
-def cleanupGpg():
-    global gpg
-    if gpg is not None:
-        shutil.rmtree(gpg.gnupghome)
-    gpg = None
+def cleanupGpg(conf):
+    global gpgCache
+    gpgCache = {}
+    shutil.rmtree(conf.GPGHome)
 
 def generateSecureName(filename):
     h = ArgonHasher(time_cost=1, memory_cost=512, parallelism=2, salt_len=0)
@@ -53,9 +59,10 @@ def compressAndEncrypt(conf, filename):
     p, h = compressAndEncryptWithHash(conf, filename, False)
     return p
 
+tids = {}
+
 def compressAndEncryptWithHash(conf, filename, computeHash=True):
-    global gpg
-    __setupGpg(conf)
+    gpg = __getGpg(conf)
     tempPath = getTempPath(filename)
     util.silentRemove(tempPath)
 
@@ -71,7 +78,7 @@ def compressAndEncryptWithHash(conf, filename, computeHash=True):
     return tempPath, hashDigest
 
 def decompressAndDecrypt(conf, path, destination):
-    __setupGpg(conf)
+    gpg = __getGpg(conf)
     computeHash = False
     util.silentRemove(destination)
 

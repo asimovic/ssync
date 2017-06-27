@@ -108,7 +108,7 @@ try:
     )
 
     config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
-    security.cleanupGpg()
+    security.cleanupGpg(conf)
 except:
     log.exception('Sync failed')
     exit(1)

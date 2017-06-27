@@ -125,6 +125,8 @@ class GpgExt(GPG):
         self.__process.stdout.close()
         self.__process.stderr.close()
         self.__process.kill()
+        if self.__process.returncode is not None and self.__process.returncode != 0:
+            log.error('Gpg subprocess failed with error code ' + self.__process.returncode)
         self.__process = None
 
         if self.__startedRead:
@@ -161,7 +163,7 @@ class GpgExt(GPG):
         return self.__buf.read(size)
 
     def __startReadStderr(self):
-        stderr = codecs.getreader(self.encoding)(self.__process.stderr)
+        stderr = self.__process.stderr
         rr = threading.Thread(target=self._read_response, args=(stderr, self.result))
         rr.setDaemon(True)
         rr.start()
@@ -173,9 +175,11 @@ class GpgExt(GPG):
         while True:
             try:
                 line = stream.readline()
+                if len(line) == 0: break
+                if not isinstance(line, str):
+                    line = line.decode(self.encoding)
                 line = '' if line is None else line.rstrip()
-                if len(line) == 0:
-                    break
+                if len(line) == 0: break
                 lines.append(line)
                 if self.verbose:  # pragma: no cover
                     print(line)
@@ -189,8 +193,8 @@ class GpgExt(GPG):
                     else:
                         value = ""
                     result.handle_status(keyword, value)
-            except ValueError: # buffer error occurs when reading the stream as its closed sometimes
-                pass
+            except ValueError as v: # buffer error occurs when reading the stream as its closed sometimes
+                break
             except Exception as e:
                 line = 'Exception: ' + str(e)
                 lines.append(line)

@@ -77,11 +77,11 @@ class SecureIndexFactory:
         if not secureIndex.hasChanges:
             log.info('Index not changed, skipping upload')
             return
+        if self.conf.args.test:
+            return
 
         # cached by api
         bucket = self.api.get_bucket_by_name(self.bucket_name)
-        #todo force upload when online version is invalid
-        #todo upload if running for a long time to enable resumes
         fi = backblaze_b2.uploadSecureFile(conf=self.conf,
                                            bucket=bucket,
                                            filepath=secureIndex.filename,
