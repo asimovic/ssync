@@ -1,4 +1,6 @@
 import os
+
+import b2_ext
 import security
 import six
 import logging
@@ -186,9 +188,13 @@ class B2DeleteAction(AbstractAction):
 
     def do_action(self, remoteFolder, conf, reporter):
         if not self.remoteFile.isDir and not conf.args.test:
-            remoteFolder.bucket.api.delete_file_version(
-                self.remoteFile.latest_version().id_,
-                self.remoteFile.nativePath)
+            try:
+                remoteFolder.bucket.api.delete_file_version(
+                    self.remoteFile.latest_version().id_,
+                    self.remoteFile.nativePath)
+            except b2_ext.exception.FileNotPresent:
+                # ignore if the files doesn't exist, operation was likely interrupted and index is wrong
+                pass
         remoteFolder.secureIndex.remove(self.remoteFile.relativePath)
 
     def do_report(self, reporter):
