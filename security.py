@@ -46,7 +46,8 @@ def __getGpg(conf):
 def cleanupGpg(conf):
     global gpgCache
     gpgCache = {}
-    shutil.rmtree(conf.GPGHome)
+    if os.path.exists(conf.GPGHome):
+        shutil.rmtree(conf.GPGHome)
 
 def generateSecureName(filename):
     h = ArgonHasher(time_cost=1, memory_cost=512, parallelism=2, salt_len=0)

@@ -79,7 +79,7 @@ class B2UploadAction(AbstractAction):
                          remoteId=None,
                          remoteName=None)
 
-        if not sf.isDir:
+        if not sf.isDir and not conf.args.testIndex:
             b2Name = security.generateSecureName(sf.relativePath)
 
             resume = False
@@ -158,7 +158,7 @@ class B2DownloadAction(AbstractAction):
             open(self.localPath, 'a').close()
         else:
             # Download the file to a .tmp file
-            downloadPath = self.localPath + '.b2.sync.tmp'
+            downloadPath = self.localPath + util.APPLICATION_EXT
             destination = DownloadDestLocalFile(downloadPath)
 
             remoteFolder.bucket.download_file_by_name(

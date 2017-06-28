@@ -29,6 +29,8 @@ def createArgs():
     parser.add_argument('-k', '--keep', action='store_true',
                         help='keep files that the destination has if they do not exist on the source')
     parser.add_argument('--test', action='store_true',
+                        help='run in test mode, all operations are only done locally')
+    parser.add_argument('--testIndex', action='store_true',
                         help='run in test mode, operations are done against index only')
     parser.add_argument('--dryrun', action='store_true',
                         help='show output of what will happen without making any changes')
@@ -54,6 +56,8 @@ def processConfig():
     log.info('Parsing Arguments')
     parser = createArgs()
     args = parser.parse_args()
+    if args.testIndex:
+        args.test = True
 
     log.info('Reading configuration')
     conf = config.readConfig(CONFIG_PATH,
@@ -65,7 +69,7 @@ def processConfig():
                                {'AccountId': str, 'ApplicationKey': str})
 
     conf.__setattr__('args', args)
-    conf.args.workers = conf.args.workers or 10
+    conf.args.workers = conf.args.workers or 20
 
     if not conf.args.exclude:
         conf.args.exclude = []
