@@ -59,6 +59,9 @@ def processConfig():
     if args.testIndex:
         args.test = True
 
+    if args.test:
+        log.info('Running in test mode.')
+
     log.info('Reading configuration')
     conf = config.readConfig(CONFIG_PATH,
                              'SSync',
