@@ -1,0 +1,9 @@
+Windows GPG installation:
+    Install gpg4win 2.3.4
+    Run Kleopatra from gpg4win
+    Create a new personal certificate
+    Right click on the certificate and export the private key with ascii armor
+
+Application:
+    Edit ssync.conf (gpgkeyfile) with the location of the private key file
+    When calling the application send the password created for the keyfile as the last argument

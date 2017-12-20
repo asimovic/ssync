@@ -42,7 +42,7 @@ class SecureIndexFactory:
 
         # try and get file info from b2
         fileInfo = None
-        if self.conf.IndexFileId:
+        if self.conf.IndexFileId: #get index file by id
             try:
                 fileInfo = self.api.get_file_info(self.conf.IndexFileId)
             except: # we have an id but the index doesn't exist in b2
@@ -51,7 +51,7 @@ class SecureIndexFactory:
         if fileInfo:
             remoteModTime = backblaze_b2.getModTimeFromFileInfo(fileInfo)
             fileId = self.conf.IndexFileId
-        else:
+        else: #get index file by name
             fileInfo = backblaze_b2.getFileInfoByName(self.api, self.bucket_name, indexName)
             remoteModTime = backblaze_b2.getModTimeFromFileInfo(fileInfo)
             fileId = None if fileInfo is None else fileInfo['fileId']
