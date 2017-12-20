@@ -105,6 +105,10 @@ except:
     log.exception('Invalid source or destination')
     exit(1)
 
+if not os.path.exists(conf.GPGKeyFile):
+    log.error('GPG key file not found at: ' + conf.GPGKeyFile)
+    exit(1)
+
 try:
     sync_folders(
         source_folder=source,
