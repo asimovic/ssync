@@ -10,7 +10,6 @@ from utility import util
 from utility.RWLock import RWLock
 from utility.ResettingTimer import ResettingTimer
 
-
 class IndexException(Exception):
     pass
 
