@@ -7,6 +7,7 @@ import security
 import logging
 import logging.config
 from sync import folder_parser
+from sync.folder import SecureFolder
 from sync.sync import sync_folders
 from utility import config
 from utility import util
@@ -34,6 +35,8 @@ def createArgs():
                         help='run in test mode, operations are done against index only')
     parser.add_argument('--dryrun', action='store_true',
                         help='show output of what will happen without making any changes')
+    parser.add_argument('-vi', '--validateIndex',
+                        help='validate and update the index on the remote folder, does not run sync')
     parser.add_argument('-s', '--silent', action='store_true',
                         help='do not show progress while syncing')
     parser.add_argument('--workers',
@@ -87,6 +90,44 @@ def logException(exctype, value, tb):
     log.fatal(f'Unhandled exception ({exctype}): {value}{os.linesep}{tb}')
     pass
 
+def runSync(conf, api):
+    log.info(f'Starting sync from: {conf.args.source} to {conf.args.destination}')
+
+    try:
+        source = folder_parser.parseSyncDir(conf.args.source, conf, api)
+        destination = folder_parser.parseSyncDir(conf.args.destination, conf, api)
+    except:
+        log.exception('Invalid source or destination')
+        exit(1)
+
+    try:
+        sync_folders(
+            source_folder=source,
+            dest_folder=destination,
+            now_millis=int(round(time.time() * 1000)),
+            stdout=sys.stdout,
+            conf=conf
+        )
+
+        config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
+        security.cleanupGpg(conf)
+    except:
+        log.exception('Sync failed')
+        exit(1)
+
+def runValidation(conf, api):
+    log.info(f'Starting index validation on : {conf.args.validateIndex}')
+
+    try:
+        remote = folder_parser.parseSyncDir(conf.args.validateIndex, conf, api)
+        if not isinstance(remote, SecureFolder):
+            log.error('Invalid remote path for validateIndex, path doesn\'t support SecureIndex')
+            exit(1)
+    except:
+        log.exception('Invalid remote path for validateIndex')
+        exit(1)
+    return
+
 log.info('Starting ssync')
 (conf, b2conf) = processConfig()
 
@@ -96,30 +137,11 @@ else:
     b2Api = backblaze_b2.setupApi(b2conf)
     b2Api.set_thread_pool_size(conf.args.workers)
 
-log.info(f'Starting sync from: {conf.args.source} to {conf.args.destination}')
-
-try:
-    source = folder_parser.parseSyncDir(conf.args.source, conf, b2Api)
-    destination = folder_parser.parseSyncDir(conf.args.destination, conf, b2Api)
-except:
-    log.exception('Invalid source or destination')
-    exit(1)
-
 if not os.path.exists(conf.GPGKeyFile):
     log.error('GPG key file not found at: ' + conf.GPGKeyFile)
     exit(1)
 
-try:
-    sync_folders(
-        source_folder=source,
-        dest_folder=destination,
-        now_millis=int(round(time.time() * 1000)),
-        stdout=sys.stdout,
-        conf=conf
-    )
-
-    config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
-    security.cleanupGpg(conf)
-except:
-    log.exception('Sync failed')
-    exit(1)
+if conf.args.validateIndex:
+    runValidation(conf, b2Api)
+else:
+    runSync(conf, b2Api)

@@ -3,6 +3,7 @@ import sys
 import logging
 from abc import ABCMeta, abstractmethod
 
+from b2_ext.raw_api import SRC_LAST_MODIFIED_MILLIS
 from utility import util
 from .exception import EnvironmentEncodingError
 from .path_entity import PathEntity, FileVersion
