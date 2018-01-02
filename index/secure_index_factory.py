@@ -30,6 +30,7 @@ class SecureIndexFactory:
         forceUpload = False
         if not self.conf.args.test:
             forceUpload = not self.__getLatestIndex()
+            log.info('Marking secure index for upload because remote is older or missing')
 
         return SecureIndex(self.conf.IndexPath, self, forceUpload=forceUpload)
 
@@ -37,6 +38,9 @@ class SecureIndexFactory:
         localModTime = None
         if os.path.exists(self.conf.IndexPath):
             localModTime = util.getModTime(self.conf.IndexPath)
+            log.info('Local secure index found')
+        else:
+            log.info('Local secure index not found')
 
         indexName = security.generateSecureName(self.__getName())
 
@@ -64,6 +68,7 @@ class SecureIndexFactory:
         # remoteModTime should always have a value if the file exists but it may have been improperly uploaded
         if remoteModTime and \
                 (not localModTime or localModTime < remoteModTime):
+            log.info('Downloading remote secure index because it newer')
             backblaze_b2.downloadSecureFile(conf=self.conf,
                                             api=self.api,
                                             fileId=fileId,

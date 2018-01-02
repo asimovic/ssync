@@ -196,7 +196,7 @@ def sync_folders(
         dest_folder.ensure_present()
 
     # Make a reporter to report progress.
-    with SyncReport(stdout, conf.args.silent) as reporter:
+    with SyncReport(stdout, conf.args.quiet) as reporter:
 
         # Make an executor to count files and run all of the actions.  This is
         # not the same as the executor in the API object, which is used for

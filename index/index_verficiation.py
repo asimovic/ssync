@@ -1,4 +1,7 @@
 from index.secure_index import SecureIndex
+import logging
+
+log = logging.getLogger()
 
 class VerifyFile:
     def __init__(self, remoteId, remoteName, size):
@@ -16,6 +19,8 @@ def ValidateAndUpdateIndex(bucket, folderName, secIndex: SecureIndex):
     for f in secIndex.getAll():
         indexFiles[f.remoteName] = f
 
+    log.info(f'Found ({len(indexFiles)}) files in index')
+
     #remove all item that are in the bucket
     for f in __iterateBucket(bucket, folderName):
         if f.remoteName in indexFiles:
@@ -24,8 +29,11 @@ def ValidateAndUpdateIndex(bucket, folderName, secIndex: SecureIndex):
                 indexFile.size == f.size):
                 del indexFiles[f.remoteName]
 
+    log.info(f'Removing ({len(indexFiles)}) files in that are no longer on the remote dir')
     for f in indexFiles:
-        secIndex.remove(f)
+        path = indexFiles[f].path
+        log.info(f"Removing: '{path}' ({f})")
+        secIndex.remove(path)
     secIndex.flush()
 
 
@@ -33,7 +41,7 @@ def __iterateBucket(bucket, folderName):
     folderName = '' if folderName == '' else folderName + '/'
     current_file = None
 
-    for (file_version_info, file_folder_name) in bucket.list_file_names(
+    for (file_version_info, file_folder_name) in bucket.ls(
             folderName, show_versions=True, recursive=True, fetch_count=1000
     ):
         assert file_version_info.file_name.startswith(folderName)
@@ -42,7 +50,7 @@ def __iterateBucket(bucket, folderName):
 
         # ignore multiple file versions and just take latest
         file_name = file_version_info.file_name[len(folderName):]
-        if current_file.remoteName != file_name and current_file is not None:
+        if current_file is not None and current_file.remoteName != file_name:
             yield current_file
         else:
             current_file = VerifyFile(file_version_info.id_, file_name, file_version_info.size)

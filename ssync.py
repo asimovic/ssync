@@ -6,6 +6,7 @@ import backblaze_b2
 import security
 import logging
 import logging.config
+from index import index_verficiation
 from sync import folder_parser
 from sync.folder import SecureFolder
 from sync.sync import sync_folders
@@ -24,8 +25,8 @@ OPTIONAL_CONFIG = {'IndexFileId': str}
 def createArgs():
     parser = argparse.ArgumentParser(description='Securely syncronize files between locations.',
                                      formatter_class=lambda prog: argparse.HelpFormatter(prog, width=100))
-    parser.add_argument('source', help='source path to sync files from')
-    parser.add_argument('destination', help='destination path to sync files to')
+    parser.add_argument('-s', '--source', help='source path to sync files from')
+    parser.add_argument('-d', '--destination', help='destination path to sync files to')
     parser.add_argument('passphrase', help='passphrase for decryption')
     parser.add_argument('-k', '--keep', action='store_true',
                         help='keep files that the destination has if they do not exist on the source')
@@ -37,7 +38,7 @@ def createArgs():
                         help='show output of what will happen without making any changes')
     parser.add_argument('-vi', '--validateIndex',
                         help='validate and update the index on the remote folder, does not run sync')
-    parser.add_argument('-s', '--silent', action='store_true',
+    parser.add_argument('-q', '--quiet', action='store_true',
                         help='do not show progress while syncing')
     parser.add_argument('--workers',
                         help='max number of worker threads for searching and uploading')
@@ -108,15 +109,12 @@ def runSync(conf, api):
             stdout=sys.stdout,
             conf=conf
         )
-
-        config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
-        security.cleanupGpg(conf)
     except:
         log.exception('Sync failed')
         exit(1)
 
 def runValidation(conf, api):
-    log.info(f'Starting index validation on : {conf.args.validateIndex}')
+    log.info(f'Starting index validation on : {conf.args.validateIndex} (files only)')
 
     try:
         remote = folder_parser.parseSyncDir(conf.args.validateIndex, conf, api)
@@ -126,6 +124,9 @@ def runValidation(conf, api):
     except:
         log.exception('Invalid remote path for validateIndex')
         exit(1)
+
+    index_verficiation.ValidateAndUpdateIndex(remote.bucket, remote.path, remote.secureIndex)
+    remote.secureIndex.source.uploadIndex(remote.secureIndex)
     return
 
 log.info('Starting ssync')
@@ -134,6 +135,7 @@ log.info('Starting ssync')
 if conf.args.test:
     b2Api = None
 else:
+    log.info('Starting b2 api')
     b2Api = backblaze_b2.setupApi(b2conf)
     b2Api.set_thread_pool_size(conf.args.workers)
 
@@ -145,3 +147,6 @@ if conf.args.validateIndex:
     runValidation(conf, b2Api)
 else:
     runSync(conf, b2Api)
+
+config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
+security.cleanupGpg(conf)
