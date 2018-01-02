@@ -1,5 +1,6 @@
 logs/
 gpg/
+deploy/
 index.sqlite
 b2_account_info
 

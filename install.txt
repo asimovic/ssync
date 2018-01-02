@@ -1,3 +1,15 @@
+Python installation
+	All files are in the Software\Python folder
+	Install Python 3.6
+	Add [InstallDir],[InstallDir]\Scripts to path (optional)
+	Run 'python [InstallDir]\pip\get-pip.py' (online)
+	Run 'python [InstallDir]\pip\get-pip.py --no-index [path to pip-9.0.1-py2.py3-none-any.whl] (offline)
+	- might by python, python36
+	Goto ssync directory
+	Run 'pip install -r requirements.txt' (online)
+	Run 'pip install -r requirements.txt --no-index --find-links ./dependencies/' (offline)
+	- might be pip, pip3, pip3.6
+
 Windows GPG installation:
     Install gpg4win 2.3.4
     Run Kleopatra from gpg4win
@@ -7,3 +19,5 @@ Windows GPG installation:
 Application:
     Edit ssync.conf (gpgkeyfile) with the location of the private key file
     When calling the application send the password created for the keyfile as the last argument
+	Run using 'python ssync.py [args] [password]'
+	Help using 'python ssync.py --help'
