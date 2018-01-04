@@ -84,7 +84,8 @@ class SecureIndex:
         self.idleTmr = None
         self.maxTmr = None
         self.source = source
-        self.hasChanges = forceUpload
+        self.hasChanges = False
+        self.forceUpload = forceUpload
 
     def get(self, path):
         self.__lazyLoad(False)

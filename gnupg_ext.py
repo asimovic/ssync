@@ -126,7 +126,9 @@ class GpgExt(GPG):
         self.__process.stderr.close()
         self.__process.kill()
         if self.__process.returncode is not None and self.__process.returncode != 0:
-            log.error('Gpg subprocess failed with error code ' + self.__process.returncode)
+            log.error('Gpg subprocess failed with error code: ' + self.__process.returncode)
+        if not self.result.valid:
+            log.error('Gpg subprocess with error: ' + self.result.status)
         self.__process = None
 
         if self.__startedRead:

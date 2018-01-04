@@ -1,7 +1,6 @@
-if exist deploy (
-	rd /s/q deploy
+if not exist deploy (
+	mkdir deploy
 )
-mkdir deploy
-robocopy /mir . deploy/ /xd .git .idea __pycache__ logs deploy /xf .gitignore index.sqlite install.* b2_account_info
+robocopy /mir . deploy/ /xd .git .idea __pycache__ logs deploy gpg /xf .gitignore index.sqlite install.* b2_account_info
 
 pause

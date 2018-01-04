@@ -7,6 +7,7 @@ import security
 import logging
 import logging.config
 from index import index_verficiation
+from index.secure_index_factory import IndexFactoryException
 from sync import folder_parser
 from sync.folder import SecureFolder
 from sync.sync import sync_folders
@@ -20,7 +21,7 @@ log = logging.getLogger()
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str,
                    'LargeFileSize': str}
-OPTIONAL_CONFIG = {'IndexFileId': str}
+OPTIONAL_CONFIG = {}
 
 def createArgs():
     parser = argparse.ArgumentParser(description='Securely syncronize files between locations.',
@@ -40,7 +41,9 @@ def createArgs():
                         help='validate and update the index on the remote folder, does not run sync')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='do not show progress while syncing')
-    parser.add_argument('--workers',
+    parser.add_argument('--uploadIndex',
+                        help='uploads the local index to the remote, debug use only')
+    parser.add_argument('-w', '--workers', type=int,
                         help='max number of worker threads for searching and uploading')
     parser.add_argument('--exclude', nargs='+',
                         help="""ignore files that match the given pattern. The pattern is 
@@ -114,7 +117,7 @@ def runSync(conf, api):
         exit(1)
 
 def runValidation(conf, api):
-    log.info(f'Starting index validation on : {conf.args.validateIndex} (files only)')
+    log.info(f'Starting index validation on: {conf.args.validateIndex} (files only)')
 
     try:
         remote = folder_parser.parseSyncDir(conf.args.validateIndex, conf, api)
@@ -126,6 +129,25 @@ def runValidation(conf, api):
         exit(1)
 
     index_verficiation.ValidateAndUpdateIndex(remote.bucket, remote.path, remote.secureIndex)
+    remote.secureIndex.source.uploadIndex(remote.secureIndex)
+    return
+
+def runUploadIndex(conf, api):
+    log.info(f'Starting index upload to: {conf.args.uploadIndex}')
+
+    try:
+        remote = folder_parser.parseSecureB2Folder(conf.args.uploadIndex, conf, api, True)
+        if not isinstance(remote, SecureFolder):
+            log.error('Invalid remote path for uploadIndex, path doesn\'t support SecureIndex')
+            exit(1)
+    except IndexFactoryException:
+        log.exception('Local index not found')
+        exit(1)
+    except:
+        log.exception('Invalid remote path for uploadIndex')
+        exit(1)
+
+    remote.secureIndex.forceUpload = True
     remote.secureIndex.source.uploadIndex(remote.secureIndex)
     return
 
@@ -145,8 +167,9 @@ if not os.path.exists(conf.GPGKeyFile):
 
 if conf.args.validateIndex:
     runValidation(conf, b2Api)
+elif conf.args.uploadIndex:
+    runUploadIndex(conf, b2Api)
 else:
     runSync(conf, b2Api)
 
-config.writeConfigValue(CONFIG_PATH, 'SSync', 'IndexFileId', conf.IndexFileId)
 security.cleanupGpg(conf)

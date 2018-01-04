@@ -16,13 +16,13 @@ def parseSyncDir(dirPath, conf, api):
     """
     if dirPath.startswith('b2://'):
         log.info(f'Parsing {dirPath} as B2 path')
-        return __parseSecureB2Folder(dirPath, conf, api)
+        return parseSecureB2Folder(dirPath, conf, api, False)
     else:
         log.info(f'Parsing {dirPath} as local path')
         return LocalFolder(dirPath)
 
 
-def __parseSecureB2Folder(path, conf, api):
+def parseSecureB2Folder(path, conf, api, forceLocalIndex):
     """
     Turns 'b2://my-bucket/foo' into a secure folder
     """
@@ -38,7 +38,7 @@ def __parseSecureB2Folder(path, conf, api):
         (bucketName, folderName) = path.split('/', 1)
 
     sif = SecureIndexFactory(conf, api, bucketName)
-    s = sif.createIndex()
+    s = sif.createIndex(forceLocalIndex)
 
     if conf.args.test:
         bucket = None

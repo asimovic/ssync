@@ -11,6 +11,11 @@ from utility.config import ConfigException
 
 log = logging.getLogger()
 
+class IndexFactoryException(Exception):
+    def __init__(self, text):
+        self.text = text
+    def __str__(self):
+        return repr(self.text)
 
 class SecureIndexFactory:
     def __init__(self, conf, api: B2Api, bucket_name):
@@ -22,51 +27,42 @@ class SecureIndexFactory:
         return self.bucket_name + '\index'
 
     # Find, create or download a local index
-    def createIndex(self):
+    def createIndex(self, forceLocalIndex):
         # try and find local file
         if os.path.isdir(self.conf.IndexPath):
             raise ConfigException('IndexPath cannot be a directory')
 
         forceUpload = False
         if not self.conf.args.test:
-            forceUpload = not self.__getLatestIndex()
+            forceUpload = not self.__getLatestIndex(forceLocalIndex)
             log.info('Marking secure index for upload because remote is older or missing')
 
         return SecureIndex(self.conf.IndexPath, self, forceUpload=forceUpload)
 
-    def __getLatestIndex(self):
+    def __getLatestIndex(self, forceLocalIndex):
         localModTime = None
         if os.path.exists(self.conf.IndexPath):
             localModTime = util.getModTime(self.conf.IndexPath)
             log.info('Local secure index found')
+        elif forceLocalIndex:
+            raise IndexFactoryException('Local secure index found with forceLocalIndex=True')
         else:
             log.info('Local secure index not found')
 
         indexName = security.generateSecureName(self.__getName())
 
-        # try and get file info from b2
-        fileInfo = None
-        if self.conf.IndexFileId: #get index file by id
-            try:
-                fileInfo = self.api.get_file_info(self.conf.IndexFileId)
-            except: # we have an id but the index doesn't exist in b2
-                self.conf.IndexFileId = None
-
-        if fileInfo:
-            remoteModTime = backblaze_b2.getModTimeFromFileInfo(fileInfo)
-            fileId = self.conf.IndexFileId
-        else: #get index file by name
-            fileInfo = backblaze_b2.getFileInfoByName(self.api, self.bucket_name, indexName)
-            remoteModTime = backblaze_b2.getModTimeFromFileInfo(fileInfo)
-            fileId = None if fileInfo is None else fileInfo['fileId']
-            self.conf.IndexFileId = fileId
+        #get index by name, by id is unreliable because there could be multiple indexes
+        #from different applications and we want the latest one
+        fileInfo = backblaze_b2.getFileInfoByName(self.api, self.bucket_name, indexName)
+        remoteModTime = backblaze_b2.getModTimeFromFileInfo(fileInfo)
+        fileId = None if fileInfo is None else fileInfo['fileId']
 
         if fileInfo and not remoteModTime:
             log.info('Remote secure index has no timestamp')
 
         # Download if the local index doesnt exist of if its older
         # remoteModTime should always have a value if the file exists but it may have been improperly uploaded
-        if remoteModTime and \
+        if not forceLocalIndex and remoteModTime and \
                 (not localModTime or localModTime < remoteModTime):
             log.info('Downloading remote secure index because it newer')
             backblaze_b2.downloadSecureFile(conf=self.conf,
@@ -79,7 +75,7 @@ class SecureIndexFactory:
 
     # Upload local index to b2
     def uploadIndex(self, secureIndex):
-        if not secureIndex.hasChanges:
+        if not secureIndex.hasChanges and not secureIndex.forceUpload:
             log.info('Index not changed, skipping upload')
             return
         if self.conf.args.test:
@@ -87,11 +83,10 @@ class SecureIndexFactory:
 
         # cached by api
         bucket = self.api.get_bucket_by_name(self.bucket_name)
-        fi = backblaze_b2.uploadSecureFile(conf=self.conf,
-                                           bucket=bucket,
-                                           filepath=secureIndex.filename,
-                                           saveModTime=True,
-                                           customName=self.__getName())
+        backblaze_b2.uploadSecureFile(conf=self.conf,
+                                      bucket=bucket,
+                                      filepath=secureIndex.filename,
+                                      saveModTime=True,
+                                      customName=self.__getName())
 
         log.info('Index uploaded')
-        self.conf.IndexFileId = fi.id_
