@@ -1,6 +1,6 @@
 ######################################################################
 #
-# File: b2/raw_api.py
+# File: b2/session.py
 #
 # Copyright 2016 Backblaze Inc. All Rights Reserved.
 #

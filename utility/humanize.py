@@ -1,3 +1,9 @@
+# Bytes-to-human / human-to-bytes converter.
+# Based on: http://goo.gl/kTQMs
+# Working with Python 2.x and 3.x.
+# Author: Giampaolo Rodola' <g.rodola [AT] gmail [DOT] com>
+# License: MIT
+
 SYMBOLS = {
     'customary'     : ('B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'),
     'customary_ext' : ('byte', 'kilo', 'mega', 'giga', 'tera', 'peta', 'exa',

@@ -1,3 +1,13 @@
+######################################################################
+#
+# File: b2/sync/action.py
+#
+# Copyright 2016 Backblaze Inc. All Rights Reserved.
+#
+# License https://www.backblaze.com/using_b2_code.html
+#
+######################################################################
+
 import os
 
 import b2_ext

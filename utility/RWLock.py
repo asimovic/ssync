@@ -1,5 +1,7 @@
-import threading
+# Copyright: Mateusz Kobos 
+# License: MIT
 
+import threading
 
 class RWLock:
     """Synchronization object used in a solution of so-called second

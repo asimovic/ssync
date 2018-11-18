@@ -1,3 +1,13 @@
+######################################################################
+#
+# File: sync/path_entity.py
+#
+# Copyright 2016 Backblaze Inc. All Rights Reserved.
+#
+# License https://www.backblaze.com/using_b2_code.html
+#
+######################################################################
+
 from functools import total_ordering
 
 @total_ordering

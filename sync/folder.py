@@ -1,3 +1,13 @@
+######################################################################
+#
+# File: sync/folder.py
+#
+# Copyright 2016 Backblaze Inc. All Rights Reserved.
+#
+# License https://www.backblaze.com/using_b2_code.html
+#
+######################################################################
+
 import os
 import sys
 import logging

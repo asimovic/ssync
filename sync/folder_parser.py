@@ -1,3 +1,13 @@
+######################################################################
+#
+# File: b2/sync/folder_parser.py
+#
+# Copyright 2016 Backblaze Inc. All Rights Reserved.
+#
+# License https://www.backblaze.com/using_b2_code.html
+#
+######################################################################
+
 import logging
 from b2_ext.exception import CommandError
 

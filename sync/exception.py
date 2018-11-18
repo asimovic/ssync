@@ -3,7 +3,8 @@
 # File: sync/exception.py
 #
 # Copyright 2016 Backblaze Inc. All Rights Reserved.
-# Modified by: Alex Simovic
+#
+# License https://www.backblaze.com/using_b2_code.html
 #
 ######################################################################
 
