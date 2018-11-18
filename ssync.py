@@ -20,7 +20,7 @@ log = logging.getLogger()
 
 CONFIG_PATH = 'ssync.conf'
 REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str,
-                   'LargeFileSize': str}
+                   'LargeFileSize': str, 'SecureNameSalt' : str, 'ArgonSalt': str}
 OPTIONAL_CONFIG = {}
 
 def createArgs():

@@ -18,9 +18,6 @@ class Passthrough(object):
     def __exit__(self, exc_type, exc_value, traceback):
         return self.passObj.__exit__(exc_type, exc_value, traceback)
 
-
-__SECURE_NAME_SALT = 'c3ViamVjdHM'
-__ARGON_SALT = b'\xa3\xfe\xc1eZ\xb6\xe3T\x08w\xb1?E\xc3\xd7\xd1'
 __gpgLock = threading.Lock()
 
 gpgCache = {}
@@ -49,9 +46,10 @@ def cleanupGpg(conf):
     if os.path.exists(conf.GPGHome):
         shutil.rmtree(conf.GPGHome)
 
-def generateSecureName(filename):
+def generateSecureName(conf, filename):
+    argonSalt = base64.b64decode(conf.ArgonSalt)
     h = ArgonHasher(time_cost=1, memory_cost=512, parallelism=2, salt_len=0)
-    hs = h.hashWithFixedSalt(__SECURE_NAME_SALT + filename, __ARGON_SALT)
+    hs = h.hashWithFixedSalt(conf.SecureNameSalt + filename, argonSalt)
     #trim the argon details and salt, they should be constant anyway
     hs = hs[51:]
     return base64.b64encode(hs.encode('utf-8'), b'-_').decode('utf-8')
