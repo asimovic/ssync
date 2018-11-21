@@ -47,7 +47,7 @@ def cleanupGpg(conf):
         shutil.rmtree(conf.GPGHome)
 
 def generateSecureName(conf, filename):
-    argonSalt = base64.b64decode(conf.ArgonSalt)
+    argonSalt = base64.b64decode(conf.ArgonSalt.encode('ascii'))
     h = ArgonHasher(time_cost=1, memory_cost=512, parallelism=2, salt_len=0)
     hs = h.hashWithFixedSalt(conf.SecureNameSalt + filename, argonSalt)
     #trim the argon details and salt, they should be constant anyway

@@ -4,7 +4,9 @@ import time
 import os
 import backblaze_b2
 import security
-import logging
+import uuid
+import base64
+import argon2
 import logging.config
 from index import index_verficiation
 from index.secure_index_factory import IndexFactoryException
@@ -19,9 +21,11 @@ util.setupLogging('logging.conf')
 log = logging.getLogger()
 
 CONFIG_PATH = 'ssync.conf'
+MAIN_CONFIG_SECTION = 'SSync'
+B2_CONFIG_SECTION = 'RemoteB2'
 REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipient': str, 'IndexPath': str,
-                   'LargeFileSize': str, 'SecureNameSalt' : str, 'ArgonSalt': str}
-OPTIONAL_CONFIG = {}
+                   'LargeFileSize': str}
+OPTIONAL_CONFIG = {'SecureNameSalt' : str, 'ArgonSalt': str}
 
 def createArgs():
     parser = argparse.ArgumentParser(description='Securely syncronize files between locations.',
@@ -31,6 +35,8 @@ def createArgs():
     parser.add_argument('passphrase', help='passphrase for decryption')
     parser.add_argument('-k', '--keep', action='store_true',
                         help='keep files that the destination has if they do not exist on the source')
+    parser.add_argument('-g', '--generateSalt', action='store_true',
+                        help='generate a new hash and name salt, existing backups will be unusable')
     parser.add_argument('--test', action='store_true',
                         help='run in test mode, all operations are only done locally')
     parser.add_argument('--testIndex', action='store_true',
@@ -71,11 +77,11 @@ def processConfig():
 
     log.info('Reading configuration')
     conf = config.readConfig(CONFIG_PATH,
-                             'SSync',
+                             MAIN_CONFIG_SECTION,
                              REQUIRED_CONFIG,
                              OPTIONAL_CONFIG)
     b2conf = config.readConfig(CONFIG_PATH,
-                               'RemoteB2',
+                               B2_CONFIG_SECTION,
                                {'AccountId': str, 'ApplicationKey': str})
 
     conf.__setattr__('args', args)
@@ -151,8 +157,18 @@ def runUploadIndex(conf, api):
     remote.secureIndex.source.uploadIndex(remote.secureIndex)
     return
 
+def generateNewSalts(conf):
+    #TODO find a better way to save configs
+    conf.SecureNameSalt = uuid.uuid4().hex
+    config.writeConfigValue(CONFIG_PATH, MAIN_CONFIG_SECTION, 'SecureNameSalt', conf.SecureNameSalt)
+    conf.ArgonSalt = base64.b64encode(os.urandom(argon2.DEFAULT_RANDOM_SALT_LENGTH)).decode('ascii')
+    config.writeConfigValue(CONFIG_PATH, MAIN_CONFIG_SECTION, 'ArgonSalt', conf.ArgonSalt)
+
 log.info('Starting ssync')
 (conf, b2conf) = processConfig()
+
+if not conf.SecureNameSalt or not conf.ArgonSalt or conf.args.generateSalt:
+    generateNewSalts(conf)
 
 if conf.args.test:
     b2Api = None
