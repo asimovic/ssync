@@ -11,7 +11,7 @@ Python installation
 	- might be pip, pip3, pip3.6
 
 Windows GPG installation:
-    Install gpg4win 2.3.4
+    Install gpg4win 2.3.4 https://www.gpg4win.org/index.html
     Run Kleopatra from gpg4win
     Create a new personal certificate
     Right click on the certificate and export the private key with ascii armor

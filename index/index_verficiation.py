@@ -17,7 +17,8 @@ def ValidateAndUpdateIndex(bucket, folderName, secIndex: SecureIndex):
 
     indexFiles = {}
     for f in secIndex.getAll():
-        indexFiles[f.remoteName] = f
+        if f.remoteName is not None:
+            indexFiles[f.remoteName] = f
 
     log.info(f'Found ({len(indexFiles)}) files in index')
 
@@ -25,8 +26,7 @@ def ValidateAndUpdateIndex(bucket, folderName, secIndex: SecureIndex):
     for f in __iterateBucket(bucket, folderName):
         if f.remoteName in indexFiles:
             indexFile = indexFiles[f.remoteName]
-            if (indexFile.remoteId == f.remoteId and
-                indexFile.size == f.size):
+            if indexFile.remoteId == f.remoteId:
                 del indexFiles[f.remoteName]
 
     log.info(f'Removing ({len(indexFiles)}) files in that are no longer on the remote dir')
@@ -50,9 +50,6 @@ def __iterateBucket(bucket, folderName):
 
         # ignore multiple file versions and just take latest
         file_name = file_version_info.file_name[len(folderName):]
-        if current_file is not None and current_file.remoteName != file_name:
-            yield current_file
-        else:
+        if current_file is None or current_file.remoteName != file_name:
             current_file = VerifyFile(file_version_info.id_, file_name, file_version_info.size)
-    if current_file is not None:
-        yield current_file
+            yield current_file

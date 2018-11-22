@@ -90,7 +90,7 @@ class B2UploadAction(AbstractAction):
                          remoteName=None)
 
         if not sf.isDir and not conf.args.testIndex:
-            b2Name = security.generateSecureName(sf.relativePath)
+            b2Name = security.generateSecureName(conf, sf.relativePath)
 
             resume = False
             getHash = sf.latest_version().hash is None

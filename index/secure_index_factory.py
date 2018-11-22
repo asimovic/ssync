@@ -45,11 +45,11 @@ class SecureIndexFactory:
             localModTime = util.getModTime(self.conf.IndexPath)
             log.info('Local secure index found')
         elif forceLocalIndex:
-            raise IndexFactoryException('Local secure index found with forceLocalIndex=True')
+            raise IndexFactoryException('Local secure index not found with forceLocalIndex=True')
         else:
             log.info('Local secure index not found')
 
-        indexName = security.generateSecureName(self.__getName())
+        indexName = security.generateSecureName(self.conf, self.__getName())
 
         #get index by name, by id is unreliable because there could be multiple indexes
         #from different applications and we want the latest one
@@ -71,7 +71,10 @@ class SecureIndexFactory:
                                             destination=self.conf.IndexPath)
 
         # return if the remote index is up to date
-        return remoteModTime and (not localModTime or localModTime <= remoteModTime)
+        if remoteModTime and (not localModTime or localModTime <= remoteModTime):
+            log.info('Local secure index is up to date')
+            return True
+        return False
 
     # Upload local index to b2
     def uploadIndex(self, secureIndex):

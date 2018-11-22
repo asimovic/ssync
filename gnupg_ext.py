@@ -144,7 +144,7 @@ class GpgExt(GPG):
         self.__process.kill()
         if self.__process.returncode is not None and self.__process.returncode != 0:
             log.error('Gpg subprocess failed with error code: ' + self.__process.returncode)
-        if not self.result.valid:
+        if not self.result.valid and self.result.status != 'encryption ok':
             log.error('Gpg subprocess with error: ' + self.result.status)
         self.__process = None
 

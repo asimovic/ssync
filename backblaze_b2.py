@@ -72,7 +72,7 @@ def uploadSecureFile(conf, bucket: Bucket, filepath, saveModTime=False, customNa
         fileInfo = None
 
     tempPath = security.compressAndEncrypt(conf, filepath)
-    secureName = security.generateSecureName(name)
+    secureName = security.generateSecureName(conf, name)
 
     uploadSource = UploadSourceLocalFile(tempPath)
     fileVersionInfo = bucket.upload(uploadSource, secureName, file_info=fileInfo)

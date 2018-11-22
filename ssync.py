@@ -28,7 +28,7 @@ REQUIRED_CONFIG = {'TempDir': str, 'GPGHome': str, 'GPGKeyFile': str, 'GPGRecipi
 OPTIONAL_CONFIG = {'SecureNameSalt' : str, 'ArgonSalt': str}
 
 def createArgs():
-    parser = argparse.ArgumentParser(description='Securely syncronize files between locations.',
+    parser = argparse.ArgumentParser(description='Securely synchronize files between locations.',
                                      formatter_class=lambda prog: argparse.HelpFormatter(prog, width=100))
     parser.add_argument('-s', '--source', help='source path to sync files from')
     parser.add_argument('-d', '--destination', help='destination path to sync files to')
